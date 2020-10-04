@@ -2,6 +2,7 @@ import numpy as np
 
 
 class Network:
+
     def __init__(self, sizes):  # sizes is the amount of neurons in each layer, in the form [x,y,z, ...]
         self.num_layers = len(sizes)
         self.sizes = sizes
@@ -13,7 +14,17 @@ class Network:
         # the same point in two arrays   eg zip([1,3,5], [2,4,6]) would give 1 2, 3 4, 5 6
         # creates a numpy array representing each weighted connection between each layer
 
+    def feedforward(self, inputs): # output of a neuron is w * inputs + b
+        for b, w in zip(self.biases, self.weights):
+            a = np.dot(w, inputs) + b # np.dot is a multiplication of vectors, since * does not work in this case
+            z = sigmoid(a)  # applying sigmoid
+        return z
+
+
+def sigmoid(x):
+    # applying the sigmoid activation function
+    return 1 / (1 + np.exp(-x))  # e^-x
+
 
 network = Network([2, 3, 1])
 print(network.weights)
-
