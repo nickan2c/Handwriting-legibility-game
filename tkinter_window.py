@@ -20,7 +20,27 @@ class logreg:
         self.main_screen.mainloop()
 
     def register(self):
-        pass
+        self.register_screen = Toplevel(self.main_screen)
+        self.register_screen.title("Register")
+        self.register_screen.geometry("300x250")
+
+        # define how the text entered will be stored
+        self.username = StringVar()
+        self.password = StringVar()
+
+        Label(self.register_screen, text="Please enter your details below").pack()
+        Label(self.register_screen, text="").pack()
+
+        username_label = Label(self.register_screen, text="Username * ").pack()
+
+        self.username_entry = Entry(self.register_screen, textvariable=self.username).pack()
+
+        password_label = Label(self.register_screen, text="Password * ").pack()
+
+        self.password_entry = Entry(self.register_screen, textvariable=self.password, show='*').pack()
+
+        Label(self.register_screen, text="").pack()
+        Button(self.register_screen, text="Register", width=10, height=1, bg="blue", command=self.register_user).pack()
 
     def register_user(self):
         pass
@@ -46,8 +66,8 @@ class logreg:
 
         self.password_login_entry = Entry(self.login_screen, textvariable=self.password_to_verify, show='*').pack()
 
-        Label(self.login_screen, text="").pack()
         Button(self.login_screen, text="Login", width=10, height=1, command=self.login_verify).pack()
+        Label(self.login_screen, text="").pack()
 
     def login_verify(self):
         pass
