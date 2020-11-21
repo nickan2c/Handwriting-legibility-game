@@ -76,7 +76,7 @@ class logreg:
             password = self.password_to_verify.get()
             print(username, 'you have pressed submit')
 
-        Label(self.login_screen, text="").pack()
+        Label(self.login_screen, text=" ").pack()
         Button(self.login_screen, text="Confirm Login", width=10, height=1, command=login_verify).pack()
 
     def login_verify(self):
