@@ -97,3 +97,19 @@ def prepare_img(image):
 
 x = np.array(prepare_img('drawing.png'))
 
+y = np.reshape(x, (28, 28)) # reshapes x into 28 x 28 so i can plot it, and see the outcome
+
+mnisted_img = x.reshape(1, 28, 28, 1)  # input for convolutional neural network is shaped like this
+
+loaded_model = tf.keras.models.load_model('trained_model.h5') # loads model that I saved in training_model.py
+
+plt.imshow(y, cmap="gray") # displays the mnist array as an image, in grey
+plt.show() # outputs it on screen
+prediction = loaded_model.predict(mnisted_img) # use loaded model to predict what the mnist image is
+print(prediction) # display prediction, which is the array of 10 floats where each index represents a number, and the float at that index represents the probability.
+# This can be done due to using softmax as the final layer
+
+print(f"I'm {round(max(prediction[0]) * 100)}% sure that that's a {np.argmax(prediction)} ") # display the guess in console, will add it so that it can be shown in tkinter later
+ # outputs largest number in array as percentage sure, and outputs the index of the largest number in the array.
+ # looks like 'I'm 93% sure that that's a 2'
+
