@@ -5,19 +5,19 @@ import os
 import hashlib
 
 
-# You don't reverse it, you never reverse a password. That's why we hash it and we don't encrypt it.
-# If you need to compare an input password with a stored password, you hash the input and compare the hashes.
-# If you encrypt a password anyone with the key can decrypt it and see it. It's not safe
+# import main
 
-def hash_password(password):
-    salt = os.urandom(32)  # randomly generates a 32 bit binary string
+def hash_password(password, salt=None):
+    if salt == None:
+        salt = os.urandom(16)  # randomly generates a 16 bit binary string if the user is registering, otherwise uses
+        # their salt that was assigned.
+    password = str(password)
+    hashed = hashlib.pbkdf2_hmac('sha256',  # The hash digest algorithm for hmac
+                                 password.encode('utf-8'),  # Convert the password into bytes
+                                 salt, 1000  # number of iterations of hash- more iterations makes it more secure
+                                 )
 
-    key = hashlib.pbkdf2_hmac('sha256',  # The hash digest algorithm for hmac
-                              password.encode('utf-8'),  # Convert the password into bytes
-                              salt, 1000  # number of iterations of hash- more iterations makes it more secure
-                              )
-
-    return salt + key
+    return hashed, salt
 
 
 class database():
@@ -35,33 +35,41 @@ class database():
           userID integer NOT NULL PRIMARY KEY,
           username text NOT NULL,
           pw_hashed text NOT NULL,
+          salt  text    NOT NULL,
           accuracy integer
           num_attempts integer
           )''')
 
         self.conn.commit()
-
-        self.c.execute("INSERT INTO HandwritingUsers(username,pw_hashed) VALUES(?,?)",
-                       ('example', '1'))  # done in this way to prevent sql injection
+        pw, s = hash_password('1')
+        self.c.execute("INSERT INTO HandwritingUsers(username,pw_hashed, salt) VALUES(?,?,?)",
+                       ('example', pw, s))  # done in this way to prevent sql injection
         self.conn.commit()
 
     def insert(self, username, password):
-        pw_hashed = hash_password(password)
-        self.c.execute("INSERT INTO HandwritingUsers(username,pw_hashed) VALUES(?,?)", (username, pw_hashed))
+        username = str(username)
+        pw_hashed, salt = hash_password(password)  # no salt provided, default provided as none
+        self.c.execute("INSERT INTO HandwritingUsers(username,pw_hashed,salt) VALUES(?,?,?)",
+                       (username, pw_hashed, salt))
         self.conn.commit()
         print('Your information has been added!')
 
     def user_password_match(self, username, entered_password):
-        check_pw_hashed = hash_password(entered_password)
+        self.c.execute(" SELECT username, salt FROM HandwritingUsers WHERE username = ?", (username,))
+        their_salt = self.c.fetchone()[1]  # grabbed salt of the user from the database, it is stored with the name
 
-        self.c.execute(" SELECT username, pw_hashed FROM HandwritingUsers WHERE username = ? AND pw_hashed = ? ",
-                       (username, check_pw_hashed))
+        pw_hashed, salt = hash_password(entered_password, their_salt)  # used their salt to salt the password
+        # they entered. If match, they are given access
+
+        self.c.execute(" SELECT username, pw_hashed, salt FROM HandwritingUsers WHERE username = ? AND pw_hashed = ? ",
+                       (username, pw_hashed))
         user_details = self.c.fetchall()
 
         if len(user_details) == 0:
             print('not in database')
             return False
         else:
+            print('you"re in')
             return True
 
 
@@ -78,15 +86,15 @@ class logreg:
         Label(text="Please Select Your Choice", bg="white", width="20", height="2").pack()  # pack puts it into screen
         Label(text="").pack()  # leaves a gap for aesthetic purposes
 
-        Button(text="Login", height="2", width="15", command=self.login).pack()  # upon clicking, calls login function
+        Button(text="Login", height="2", width="15", command=self.__login).pack()  # upon clicking, calls login function
         Label(text="").pack()
 
         Button(text="Register", height="2", width="15",
-               command=self.register).pack()  # upon clicking, calls register function
+               command=self.__register).pack()  # upon clicking, calls register function
 
         self.main_screen.mainloop()
 
-    def register(self):
+    def __register(self):
         self.register_screen = Toplevel(self.main_screen)
         self.register_screen.title("Register")
         self.register_screen.geometry("300x250")
@@ -114,9 +122,10 @@ class logreg:
         Button(self.register_screen, text="Register", width=10, height=1, bg="blue", command=self.register_user).pack()
 
     def register_user(self):
-        pass
+        self.db.insert(self.username.get(), self.password.get())
+        print('You have been registered')
 
-    def login(self):
+    def __login(self):
         self.login_screen = Toplevel(self.main_screen)
         self.login_screen.title("Login")
         self.login_screen.geometry("300x250")
