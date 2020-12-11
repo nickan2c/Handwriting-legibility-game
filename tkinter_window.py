@@ -3,9 +3,7 @@ from tkinter import *
 import sqlite3
 import os
 import hashlib
-
-
-# import main
+import main
 
 def hash_password(password, salt=None):
     if salt == None:
@@ -42,8 +40,9 @@ class database():
 
         self.conn.commit()
         pw, s = hash_password('1')
-        self.c.execute("INSERT INTO HandwritingUsers(username,pw_hashed, salt, num_attempts) VALUES(?,?,?,?)",
-                       ('example', pw, s, 1))  # done in this way to prevent sql injection
+        self.c.execute(
+            "INSERT INTO HandwritingUsers(username,pw_hashed, salt, num_attempts,accuracy) VALUES(?,?,?,?,?)",
+            ('example', pw, s, '1', '2'))  # done in this way to prevent sql injection
         self.c.execute("INSERT INTO HandwritingUsers(username,pw_hashed, salt) VALUES(?,?,?)",
                        ('jane', pw, s))
         self.conn.commit()
@@ -58,26 +57,37 @@ class database():
 
     def user_password_match(self, username, entered_password):
         self.c.execute(" SELECT username, salt FROM HandwritingUsers WHERE username = ?", (username,))
-        their_salt = self.c.fetchone()[1]  # grabbed salt of the user from the database, it is stored with the name
-
-        pw_hashed, salt = hash_password(entered_password, their_salt)  # used their salt to salt the password
-        # they entered. If match, they are given access
-
-        self.c.execute(" SELECT username, pw_hashed, salt FROM HandwritingUsers WHERE username = ? AND pw_hashed = ? ",
-                       (username, pw_hashed))
-        user_details = self.c.fetchall()
-
-        if len(user_details) == 0:
-            print('not in database')
+        fetched = self.c.fetchone()
+        print(fetched)
+        if fetched == None:
+            print('user not registered')
             return False
         else:
-            print('you"re in')
-            return True
+            their_salt = fetched[1]  # grabbed salt of the user from the database
+            pw_hashed, salt = hash_password(entered_password, their_salt)  # used their salt to hash the password
+            # they entered. If match, they are given access
+
+            self.c.execute(
+                " SELECT username, pw_hashed, salt FROM HandwritingUsers WHERE username = ? AND pw_hashed = ? ",
+                (username, pw_hashed))
+            user_details = self.c.fetchall()
+
+            if len(user_details) == 0:
+                print('not in database')
+                return False
+            else:
+                print('you"re in')
+                return True
 
     def display_leaderboard(self):
-        self.c.execute('SELECT username, accuracy, num_attempts FROM HandwritingUsers WHERE num_attempts != 0 ORDER BY accuracy ASC')
-        self.conn.commit()
+        self.c.execute(
+            'SELECT username, accuracy, num_attempts FROM HandwritingUsers WHERE num_attempts != 0 ORDER BY accuracy ASC')
+        self.conn.commit()  # dont want to display people who havent attempted the game yet
 
+        return self.c.fetchmany(5)  # returns top 5
+
+    def get_user_score(self, user):
+        self.c.execute(" SELECT username, accuracy, num_attempts  FROM HandwritingUsers WHERE username = ?", (user,))
         return self.c.fetchall()
 
 
@@ -103,27 +113,28 @@ class logreg:
                command=self.__main_screen).pack()  # upon clicking, calls register function
 
         self.root.mainloop()
+
     def __main_screen(self):
         self.__main_screen = Toplevel(self.root)  # create window
         self.__main_screen.geometry("300x250")  # set window size
         self.__main_screen.title("Account selection")  # set window title
 
-        Label(self.__main_screen, text="Please Select Your Choice", bg="white", width="20", height="2").pack()  # pack puts it into screen
-        Label(self.__main_screen,text="").pack()  # leaves a gap for aesthetic purposes
+        Label(self.__main_screen, text="Please Select Your Choice", bg="white", width="20",
+              height="2").pack()  # pack puts it into screen
+        Label(self.__main_screen, text="").pack()  # leaves a gap for aesthetic purposes
 
-        Button(self.__main_screen,text="Login", height="2", width="15", command=self.__login).pack()  # upon clicking, calls login function
-        Label(self.__main_screen,text="").pack()
+        Button(self.__main_screen, text="Login", height="2", width="15",
+               command=self.__login).pack()  # upon clicking, calls login function
+        Label(self.__main_screen, text="").pack()
 
-        Button(self.__main_screen,text="Register", height="2", width="15",
+        Button(self.__main_screen, text="Register", height="2", width="15",
                command=self.__register).pack()  # upon clicking, calls register function
-        Label(self.__main_screen,text="").pack()
+        Label(self.__main_screen, text="").pack()
 
-        Button(self.__main_screen,text="Continue as Guest", height="2", width="15", command=self.__continue).pack()
-
-
+        Button(self.__main_screen, text="Continue as Guest", height="2", width="15", command=self.__continue).pack()
 
     def __register(self):
-        self.register_screen = Toplevel(self.__main_screen) # like a stack
+        self.register_screen = Toplevel(self.__main_screen)  # like a stack
         self.register_screen.title("Register")
         self.register_screen.geometry("300x250")
 
@@ -147,7 +158,8 @@ class logreg:
         self.password_entry.pack()
 
         Label(self.register_screen, text="").pack()
-        Button(self.register_screen, text="Register", width=10, height=1, bg="blue", command=self.__register_user).pack()
+        Button(self.register_screen, text="Register", width=10, height=1, bg="blue",
+               command=self.__register_user).pack()
 
     def __register_user(self):
         self.db.insert(self.username.get(), self.password.get())
@@ -198,7 +210,6 @@ class logreg:
             Button(self.login_failed_screen, text="OK", command=delete_login_failed_screen).pack()
             self.login_success = False
 
-
         def login_verify():
             username = self.username_to_verify.get()
             password = self.password_to_verify.get()
@@ -219,31 +230,75 @@ class logreg:
         self.__continue_screen.title("Welcome!")
         self.__continue_screen.geometry("500x350")
 
-        Label(self.__continue_screen, text="Welcome to the handwriting game - digit edition! \n In this game you will be tested on how neatly you can write numbers.\n The computer will read your writing, \n and will give you an overall score for how legible your writing was!\n Your score will be compared with your friends to see \nwhich of you has the neater writing!").pack()
+        Label(self.__continue_screen,
+              text="Welcome to the handwriting game - digit edition! \n In this game you will be tested on how neatly you can write numbers.\n The computer will read your writing, \n and will give you an overall score for how legible your writing was!\n Your score will be compared with your friends to see \nwhich of you has the neater writing!").pack()
         Label(self.__continue_screen, text="").pack()
         Label(self.__continue_screen, text="").pack()
-        Label(self.__continue_screen, text="").pack()
+        if self.login_success:
+            Label(self.__continue_screen, text="You are logged in").pack()
+        elif not self.login_success:
+            Label(self.__continue_screen,
+                  text="You are not logged in. By continuing your score will not be saved.").pack()
 
-        Button(self.__continue_screen, text='Get started!', width=10, height=1, command=self.__main_screen.quit).pack()
+        Button(self.__continue_screen, text='Get started!', width=10, height=1, command=self.__selection).pack()
 
     def __leaderboard(self):
         self.__leaderboard_screen = Toplevel(self.root)  # like a stack
         self.__leaderboard_screen.title("Leaderboard")
         self.__leaderboard_screen.geometry("300x250")
 
+        self.username_to_search = StringVar()
+
         leaders = self.db.display_leaderboard()
         print('hello')
         print(leaders)
         row1 = 'Username,accuracy, number of attempts'
+        Label(self.__leaderboard_screen, text=row1).pack()
         for row in leaders:
-            print(row)
-            Label(self.__leaderboard_screen, text=row1).pack()
-            Label(self.__leaderboard_screen, text=row).pack()
-        #Label(self.__leaderboard_screen, text='row').pack()
+            Label(self.__leaderboard_screen, text=f'{row[0]} | {row[1]} | {row[2]}').pack()
+        # Label(self.__leaderboard_screen, text='row').pack()
+        self.search_username = Entry(self.__leaderboard_screen, textvariable=self.username_to_search).pack()
+        Button(self.__leaderboard_screen, text='search username', width=15, height=2, command=self.find_username).pack()
 
+    def find_username(self):
+        user = self.username_to_search.get()  # gets entered text
+        scores = self.db.get_user_score(user)  # returns sql statemtn that grabs all scores by that username
+        row1 = 'Username,accuracy, number of attempts'
+        Label(self.__leaderboard_screen, text=row1).pack()
+        for row in scores:
+            Label(self.__leaderboard_screen, text=f'{row[0]} | {row[1]} | {row[2]}').pack()
+
+    def __selection(self):
+        self.__selection_screen = Toplevel(self.__continue_screen)  # like a stack
+        self.__selection_screen.title("Selections")
+        self.__selection_screen.geometry("400x300")
+        self.num_images_selected = StringVar()
+
+        optionList = []
+        for i in range(1, 20):
+            optionList.append(str(i))
+
+        self.num_images_selected.set(optionList[0])
+
+        Label(self.__selection_screen, text='Select the number of images you would like to go through').pack()
+        OptionMenu(self.__selection_screen, self.num_images_selected, *optionList).pack()
+
+        Label(self.__selection_screen, text='Select the number of images you would like to go through').pack()
+
+        Button(self.__selection_screen, text='begin', width=15, height=2, command=self.begin).pack()
+
+
+    def begin(self):
+        self.__begin_screen = Toplevel(self.__continue_screen)  # like a stack
+        self.__begin_screen.title("begin")
+        self.__begin_screen.geometry("300x250")
+        num_images = int(self.num_images_selected.get())
+        Button(self.__begin_screen, text='predict', width=15, height=2, command=lambda: main.predict(num_images)).pack()
 
 l = logreg()
 l._start_screen()
 
 # import main
 # main.predict(l.login_success)
+
+print('hi b')
