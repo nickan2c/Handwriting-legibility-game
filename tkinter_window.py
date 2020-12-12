@@ -5,6 +5,7 @@ import os
 import hashlib
 import main
 
+
 def hash_password(password, salt=None):
     if salt == None:
         salt = os.urandom(16)  # randomly generates a 16 bit binary string if the user is registering, otherwise uses
@@ -58,7 +59,6 @@ class database():
     def user_password_match(self, username, entered_password):
         self.c.execute(" SELECT username, salt FROM HandwritingUsers WHERE username = ?", (username,))
         fetched = self.c.fetchone()
-        print(fetched)
         if fetched == None:
             print('user not registered')
             return False
@@ -90,6 +90,10 @@ class database():
         self.c.execute(" SELECT username, accuracy, num_attempts  FROM HandwritingUsers WHERE username = ?", (user,))
         return self.c.fetchall()
 
+    def update_column(self, col, value, user):
+
+        self.c.execute('UPDATE HandwritingUsers SET ? = ? WHERE UserID = ?', (col, value, user))
+
 
 class logreg:
 
@@ -100,7 +104,7 @@ class logreg:
     def _start_screen(self):
         self.root = Tk()
         self.root.geometry("300x250")  # set window size
-        self.root.title("Account Login")  # set window title
+        self.root.title("Handwriting tester")  # set window title
 
         Label(text="Please Select Your Choice", bg="white", width="20", height="2").pack()  # pack puts it into screen
         Label(text="").pack()  # leaves a gap for aesthetic purposes
@@ -162,8 +166,41 @@ class logreg:
                command=self.__register_user).pack()
 
     def __register_user(self):
-        self.db.insert(self.username.get(), self.password.get())
-        print('You have been registered')
+        def register_failed(error_msg):
+            register_failed_screen = Toplevel(self.register_screen)
+            register_failed_screen.title("Error")
+            register_failed_screen.geometry("150x100")
+
+            Label(register_failed_screen, text=error_msg).pack()
+            Button(register_failed_screen, text="OK", command=register_failed_screen.destroy).pack()
+
+        def register_success():
+            register_success_screen = Toplevel(self.register_screen)
+            register_success_screen.title("Success")
+            register_success_screen.geometry("150x100")
+
+            Label(register_success_screen, text="You have been registered").pack()
+            Button(register_success_screen, text="OK", command=register_success_screen.destroy).pack()
+
+        password = self.password.get()
+        username = self.username.get()
+        if 20 > len(username) > 2:
+            if username.isalnum():
+                if username[0].isalpha():
+                    if len(password) > 8:
+                        if ' ' not in password and ' ' not in username:
+                            register_success()
+                            self.db.insert(username, password)
+                        else:
+                            register_failed('Must not have spaces. Use underscores instead(_)')
+                    else:
+                        register_failed('password must be longer than 8 char')
+                else:
+                    register_failed('First character must be a letter')
+            else:
+                register_failed('Username must be alphanumeric')
+        else:
+            register_failed('that username length is invalid')
 
     def __login(self):
         self.login_screen = Toplevel(self.__main_screen)
@@ -186,28 +223,23 @@ class logreg:
 
         self.password_login_entry = Entry(self.login_screen, textvariable=self.password_to_verify, show='*').pack()
 
-        def delete_login_failed_screen():
-            self.login_failed_screen.destroy()
-
-        def delete_login_success_screen():
-            self.login_success_screen.destroy()
-
         def login_success():
             self.login_success_screen = Toplevel(self.login_screen)
             self.login_success_screen.title("Success")
             self.login_success_screen.geometry("150x100")
 
             Label(self.login_success_screen, text="Login Success").pack()
-            Button(self.login_success_screen, text="OK", command=delete_login_success_screen).pack()
+            Button(self.login_success_screen, text="OK", command=self.login_success_screen.destroy).pack()
 
-        def login_failed():
+            self.login_success = True
+
+        def login_failed(error_msg):
             self.login_failed_screen = Toplevel(self.login_screen)
             self.login_failed_screen.title("Error")
             self.login_failed_screen.geometry("150x100")
 
-            Label(self.login_failed_screen, text="Invalid credentials supplied").pack()  # will not say which of user
-            # and password are wrong, more secure
-            Button(self.login_failed_screen, text="OK", command=delete_login_failed_screen).pack()
+            Label(self.login_failed_screen, text=error_msg).pack()
+            Button(self.login_failed_screen, text="OK", command=self.login_failed_screen.destroy).pack()
             self.login_success = False
 
         def login_verify():
@@ -216,11 +248,8 @@ class logreg:
 
             if self.db.user_password_match(username, password):
                 login_success()
-                self.login_success = True
-
             else:
-                login_failed()
-                self.login_success = False
+                login_failed('invalid credentials')
 
         Label(self.login_screen, text="").pack()
         Button(self.login_screen, text="Confirm Login", width=10, height=1, command=login_verify).pack()
@@ -263,7 +292,7 @@ class logreg:
     def find_username(self):
         user = self.username_to_search.get()  # gets entered text
         scores = self.db.get_user_score(user)  # returns sql statemtn that grabs all scores by that username
-        row1 = 'Username,accuracy, number of attempts'
+        row1 = 'Username, accuracy, number of attempts'
         Label(self.__leaderboard_screen, text=row1).pack()
         for row in scores:
             Label(self.__leaderboard_screen, text=f'{row[0]} | {row[1]} | {row[2]}').pack()
@@ -281,24 +310,44 @@ class logreg:
         self.num_images_selected.set(optionList[0])
 
         Label(self.__selection_screen, text='Select the number of images you would like to go through').pack()
-        OptionMenu(self.__selection_screen, self.num_images_selected, *optionList).pack()
+        OptionMenu(self.__selection_screen, self.num_images_selected, *optionList).pack()  # drop down menu
 
         Label(self.__selection_screen, text='Select the number of images you would like to go through').pack()
 
         Button(self.__selection_screen, text='begin', width=15, height=2, command=self.begin).pack()
 
-
     def begin(self):
-        self.__begin_screen = Toplevel(self.__continue_screen)  # like a stack
-        self.__begin_screen.title("begin")
-        self.__begin_screen.geometry("300x250")
+
         num_images = int(self.num_images_selected.get())
-        Button(self.__begin_screen, text='predict', width=15, height=2, command=lambda: main.predict(num_images)).pack()
+
+        main.predict(self.root, num_images, self.login_success)
+
+        self.__begin_screen = Tk()  # don't want this to be a top level of anything, since i want to keep this open
+        self.__begin_screen.title("Results")
+        self.__begin_screen.geometry("300x250")
+
+        def get_results():
+            f = open('user_score.txt', 'r')
+            num_correct = 0
+            for row in f:
+                lrow = row[:-1]  # remove \n
+                print(lrow)
+                attempt_num = lrow[0]  # first digit
+                prompt = lrow[2]  # next digit, after whitespace
+                guess = lrow[4]  # next digit, after whitespace
+                certainty = int(lrow[6:])  # rest of the string, after whitespace
+                Label(self.__begin_screen,
+                      text=f"Image number{attempt_num}\n You should have drawn a {prompt}.\n I think that's a {guess} I'm {certainty}% certain").pack()
+                if guess == prompt and certainty > 60:
+                    num_correct += 1
+                else:
+                    Label(self.__begin_screen, text=" You've not drawn that well enough for me to recognise it.").pack()
+
+
+
+        Button(self.__begin_screen, text='Get results', width=15, height=2, command=get_results).pack()
+
 
 l = logreg()
 l._start_screen()
 
-# import main
-# main.predict(l.login_success)
-
-print('hi b')
