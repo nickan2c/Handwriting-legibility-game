@@ -4,9 +4,18 @@ import sqlite3
 import os
 import hashlib
 import main
+import random
 
 
 def hash_password(password, salt=None):
+    '''
+    If user has already got a salt, then that will be passed in as salt parameter. If not, salt is defined as None, and
+    so a new salt is generated for them.
+    hashes password using hashlib
+    :param password:
+    :param salt:
+    :return: hashed password, salt
+    '''
     if salt == None:
         salt = os.urandom(16)  # randomly generates a 16 bit binary string if the user is registering, otherwise uses
         # their salt that was assigned.
@@ -22,14 +31,14 @@ def hash_password(password, salt=None):
 class database():
 
     def __init__(self):
-        self.conn = sqlite3.connect('HandwritingUsers')  # establishing a connection with the memory, so that I can debug,
-        # with a new database each time
+        self.conn = sqlite3.connect('HandwritingUsers') # establishes connection with database
         self.c = self.conn.cursor()
 
         # this is used to solve the problem of the c.fetchall() function returning a unicode string rather than utf-8
         # before, it would return " u'username' " now with this line it returns " 'username' "
         self.conn.text_factory = str
 
+        # can be uncommented if tables not yet created
         # self.c.execute('''CREATE TABLE Users(
         #   UserID integer NOT NULL PRIMARY KEY,
         #   username text NOT NULL,
@@ -56,7 +65,7 @@ class database():
         #           primary key (RoundID, UserID,ResultID)
         #           )''')
         # self.conn.commit()
-        #pw, s = hash_password('1')
+        # pw, s = hash_password('1')
         # self.c.execute(
         #     "INSERT INTO Users(username,pw_hashed, salt) VALUES(?,?,?)", ('example', pw, s))
         #
@@ -67,9 +76,13 @@ class database():
         #     "INSERT INTO Results(UserID, Overall_accuracy,num_attempts,num_correct) VALUES(?,?,?,?)",
         #     (2, 12, 22, 6))  # has res id 1
         # self.conn.commit()
-        self.c.execute('select UserID,RoundID,ResultID from Rounds ')
-        print(self.c.fetchall())
+
     def user_in_db(self, username):
+        '''
+
+        :param username:
+        :return True:  if user is in database
+        '''
         self.c.execute("select * From Users where username = ?", (username,))
         fetched = self.c.fetchone()
         if fetched == None:
@@ -77,10 +90,17 @@ class database():
         return True
 
     def insert(self, username, password):
+        '''
+        inserts the username into the database, and also hashes the password, then stores the salt,password,username.
+        :param username StringVar:
+        :param password str:
+        :return:
+        '''
         username = str(username)
+        password = str(password)
         pw_hashed, salt = hash_password(password)  # no salt provided, default provided as none
         self.c.execute("INSERT INTO Users(username,pw_hashed,salt) VALUES(?,?,?)",
-                       (username, pw_hashed, salt))  # done in this way to prevent sql injection
+                       (username, pw_hashed, salt))  # used parameterised sql to prevent sql injection
         self.conn.commit()
         print('Your information has been added!')
 
@@ -107,7 +127,7 @@ class database():
                 print('you"re in')
                 return True
 
-    def display_leaderboard(self):  # NEED EDITING
+    def display_leaderboard(self):
         self.c.execute('''SELECT Users.username, Results.Overall_accuracy,Results.num_attempts,Results.num_correct
         FROM Users,Results 
         WHERE Users.UserID = Results.UserID 
@@ -117,16 +137,29 @@ class database():
 
         return self.c.fetchmany(5)  # returns top 5
 
-    def get_user_score(self, user):
-        self.c.execute(" SELECT username, accuracy, num_attempts  FROM Users WHERE username = ?", (user,))
+    def get_user_score(self, user):  # get every round user has done, and display
+        '''
+
+        :param user:
+        :return: list of Rounds that user has done, list
+        '''
+        username = str(user)
+        self.c.execute('select UserID from Users Where username = ?', (username,))
+        their_UserID = self.c.fetchone()[0]
+
+        self.c.execute('''SELECT Rounds.Correct, Rounds.Number_to_draw, Rounds.Number_drawn, Rounds.certainty
+                        FROM Rounds
+                        WHERE Rounds.UserID = ?
+                        ''', (their_UserID,))
         return self.c.fetchall()
 
-    def update_column(self, col, value, user):
-        self.c.execute('select userID from Users where username = ?', (user,))
-        userID = self.c.fetchone()[0]
+    # def update_column(self, col, value, user):
+    #     self.c.execute('select userID from Users where username = ?', (user,))
+    #     userID = self.c.fetchone()[0]
+    #
+    #     self.c.execute('UPDATE Users SET ? = ? WHERE UserID = ?', (col, value, userID))
+    #     self.conn.commit()
 
-        self.c.execute('UPDATE Users SET ? = ? WHERE UserID = ?', (col, value, userID))
-        self.conn.commit()
     def insert_round(self, user, attempt_num, correct, num_to_draw, num_drawn, certainty):
         '''
         :param user: StringVar, username. stringvar since it is a tkinter entry. converted to string below
@@ -140,9 +173,9 @@ class database():
         '''
         user = str(user)
         if correct:
-            correct = 'y'
+            correct = 'Yes'
         else:
-            correct = 'n'
+            correct = 'no'
 
         self.c.execute('select UserID from Users where username = ?', (user,))
         userID = self.c.fetchone()[0]
@@ -160,10 +193,11 @@ class database():
         # self.c.execute('select * from Rounds ')
         # print(self.c.fetchall())
 
-    def insert_results(self, username, accuracy=None, num_attempts=None, num_correct=None):  # when first
+    def insert_results(self, username, accuracy=None, num_attempts=None, num_correct=None):
+
+    # when first
         # creating result row, these values are none until the game ends, and they can be determined
         user = str(username)
-        print('username', user)
         self.c.execute('select UserID from Users where username = ?', (user,))
         userID = self.c.fetchone()[0]
         self.c.execute(
@@ -172,6 +206,7 @@ class database():
         self.c.execute('select * from Results')
         # print(self.c.fetchall())
         self.conn.commit()
+
     def update_results(self, username, accuracy, num_attempts, num_correct):  # when first
         # creating result row, these values are none until the game ends, and they can be determined
         user = str(username)
@@ -188,6 +223,7 @@ class database():
             (accuracy, num_attempts, num_correct, userID, resultID))
         self.c.execute('select * from Results')
         self.conn.commit()
+
 
 class tkinter_windows:
 
@@ -229,7 +265,7 @@ class tkinter_windows:
                command=self.__register).pack()  # upon clicking, calls register function
         Label(self.__main_screen, text="").pack()
 
-        Button(self.__main_screen, text="Continue as Guest", height="2", width="15", command=self.__continue).pack()
+        Button(self.__main_screen, text="Continue", height="2", width="15", command=self.__continue).pack()
 
     def __register(self):
         self.register_screen = Toplevel(self.__main_screen)  # like a stack
@@ -281,7 +317,7 @@ class tkinter_windows:
         password = self.password.get()
         username = self.username.get()
 
-        if 20 > len(username) > 2:  # username length
+        if 2 < len(username) < 20:  # username length
             if username.isalnum():  # alphanumeric
                 if username[0].isalpha():  # first letter must be capital
                     if len(password) > 8:  # password length
@@ -374,13 +410,12 @@ class tkinter_windows:
     def __leaderboard(self):
         self.__leaderboard_screen = Toplevel(self.root)  # like a stack
         self.__leaderboard_screen.title("Leaderboard")
-        self.__leaderboard_screen.geometry("300x250")
+        self.__leaderboard_screen.geometry("400x350")
 
         self.username_to_search = StringVar()
 
         leaders = self.db.display_leaderboard()
-        print('hello')
-        print(leaders)
+
         row1 = 'Username,accuracy, number of attempts'
         Label(self.__leaderboard_screen, text=row1).pack()
         for row in leaders:
@@ -390,12 +425,12 @@ class tkinter_windows:
         Button(self.__leaderboard_screen, text='search username', width=15, height=2, command=self.find_username).pack()
 
     def find_username(self):
-        user = self.username_to_search.get()  # gets entered text
-        scores = self.db.get_user_score(user)  # returns sql statemtn that grabs all scores by that username
-        row1 = 'Username, accuracy, number of attempts'
+        user = str(self.username_to_search.get())  # gets entered text
+        scores = self.db.get_user_score(user)  # returns sql statement that grabs all scores by that username
+        row1 = 'Correct, Prompt, Seen, Certainty(%)'
         Label(self.__leaderboard_screen, text=row1).pack()
         for row in scores:
-            Label(self.__leaderboard_screen, text=f'{row[0]} | {row[1]} | {row[2]}').pack()
+            Label(self.__leaderboard_screen, text=row).pack()
 
     def __selection(self):
         self.__selection_screen = Toplevel(self.__continue_screen)  # like a stack
@@ -421,44 +456,76 @@ class tkinter_windows:
         num_images = int(self.num_images_selected.get())
 
         main.predict(self.root, num_images, self.login_success)
+        self.accuracy = 0
+        self.num_correct = 0
+        self.num_attempts = 0
 
         self.__begin_screen = Tk()  # don't want this to be a top level of anything, since i want to keep this open
         self.__begin_screen.title("Results")
         self.__begin_screen.geometry("300x250")
 
-        def get_results():
-            num_correct = 0
-            num_attempts = 0
-            certainties = []
-            correct = False
-            if self.login_success:
-                self.db.insert_results(str(self.username))
-            f = open('user_score.txt', 'r')
+        if self.login_success:
+            self.db.insert_results(str(self.username))
 
-            for row in f:
-                new_row = row[:-1]  # remove \n by list slicing
-                attempt_num = int(new_row[0])  # first digit
-                prompt = int(new_row[2])  # next digit, after whitespace
-                guess = int(new_row[4])  # next digit, after whitespace
-                certainty = int(new_row[6:])  # rest of the string, after whitespace
-                certainties.append(certainty)
-                Label(self.__begin_screen,
-                      text=f"Image number{attempt_num}\n You should have drawn a {prompt}.\n I think that's a {guess} I'm {certainty}% certain").pack()
-                if guess == prompt and certainty > 60:
-                    correct = True
-                    num_correct += 1
-                else:
-                    Label( text=" You've not drawn that well enough for me to recognise it.").pack()
-                num_attempts += 1
-                accuracy = sum(certainties) / num_attempts
-                Label(self.__begin_screen, text=f" Accuracy = {accuracy}")
+        self.result_button = Button(self.__begin_screen, text='Get results', width=15, height=2, command= self.get_results)
+        self.result_button.pack()
 
-                if self.login_success:
-                    self.db.insert_round(str(self.username), attempt_num, correct, prompt, guess, certainty)
-                    self.db.update_results(self.username, accuracy, num_attempts, num_correct)
-
-        Button(self.__begin_screen, text='Get results', width=15, height=2, command=get_results).pack()
         self.__begin_screen.mainloop()
+
+    def get_results(self):
+
+        certainties = []
+        correct = False
+        self.result_button.destroy()  # destroy button so that user cannot press multiple times
+
+        f = open('user_score.txt', 'r')
+
+        for row in f:
+            new_row = row[:-1]  # remove \n by list slicing
+            attempt_num = int(new_row[0])  # first digit
+            prompt = int(new_row[2])  # next digit, after whitespace
+            guess = int(new_row[4])  # next digit, after whitespace
+            certainty = int(new_row[6:])  # rest of the string, after whitespace
+            certainties.append(certainty)
+
+            Label(self.__begin_screen,
+                  text=f"Image number{attempt_num}\n You should have drawn a {prompt}.\n I think that's a {guess} I'm {certainty}% certain").pack()
+            if guess == prompt and certainty > 60:
+                correct = True
+                self.num_correct += 1
+                Label(text=" Great drawing!").pack()
+
+            else:
+                Label(text=" You've not drawn that well enough for me to recognise it.").pack()
+            self.num_attempts += 1
+
+            if self.login_success:
+                self.db.insert_round(str(self.username), attempt_num, correct, prompt, guess, certainty)
+
+
+        if self.login_success:
+
+            self.db.c.execute('select UserID from Users Where username = ?', (self.username,))
+            userID = self.db.c.fetchone()
+            self.db.c.execute('''SELECT MAX(ResultID)
+                                        FROM Users, Results
+                                        Where Results.UserID = Users.UserID
+                                        ''')
+            newest_resultID = self.db.c.fetchone()[0]
+            # gets average accuracy of user rounds
+            self.db.c.execute('''SELECT AVG(Rounds.certainty)
+                    FROM Rounds, Users, Results
+                    Where (Users.UserID = Rounds.UserID) AND (Results.UserID = Rounds.UserID) 
+                    AND Users.UserID = ?
+                    AND Rounds.ResultID = ?
+                    ''', (userID, newest_resultID))
+            # print(self.db.c.fetchone()[0])
+            self.accuracy = self.db.c.fetchone()[0]
+
+            self.db.update_results(self.username, self.accuracy, self.num_attempts, self.num_correct)
+
+
+
 
 win = tkinter_windows()
 win._start_screen()
