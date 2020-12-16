@@ -49,6 +49,8 @@ class drawing:
 
         EpsImagePlugin.gs_windows_binary = r'C:\Program Files\gs\gs9.53.3\bin\gswin64c'  # this line was used in order to
         # fix an error I was having, where the ghostscript file used in Image.open wasn't found
+        # https://stackoverflow.com/questions/44587376/oserror-unable-to-locate-ghostscript-on-paths
+        
         img = Image.open("drawing.eps")
         img.save(f"drawing{self.attempt_number}.png", "png")  # saves file using f string. ie it will be drawing1,
         # drawing2, etc. This way i can retrieve the images later, as before it would just save to drawing.png each time
