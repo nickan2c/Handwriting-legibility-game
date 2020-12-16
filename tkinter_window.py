@@ -3,7 +3,7 @@ from tkinter import *
 import sqlite3
 import os
 import hashlib
-import main
+import draw_window
 import random
 
 
@@ -31,7 +31,7 @@ def hash_password(password, salt=None):
 class database():
 
     def __init__(self):
-        self.conn = sqlite3.connect('HandwritingUsers') # establishes connection with database
+        self.conn = sqlite3.connect('HandwritingUsers')  # establishes connection with database
         self.c = self.conn.cursor()
 
         # this is used to solve the problem of the c.fetchall() function returning a unicode string rather than utf-8
@@ -137,7 +137,7 @@ class database():
 
         return self.c.fetchmany(5)  # returns top 5
 
-    def get_user_score(self, user):  # get every round user has done, and display
+    def get_user_scores(self, user):  # get every round user has done, and display
         '''
 
         :param user:
@@ -147,7 +147,7 @@ class database():
         self.c.execute('select UserID from Users Where username = ?', (username,))
         their_UserID = self.c.fetchone()[0]
 
-        self.c.execute('''SELECT Rounds.Correct, Rounds.Number_to_draw, Rounds.Number_drawn, Rounds.certainty
+        self.c.execute('''SELECT Rounds.RoundID, Rounds.Correct, Rounds.Number_to_draw, Rounds.Number_drawn, Rounds.certainty
                         FROM Rounds
                         WHERE Rounds.UserID = ?
                         ''', (their_UserID,))
@@ -194,8 +194,16 @@ class database():
         # print(self.c.fetchall())
 
     def insert_results(self, username, accuracy=None, num_attempts=None, num_correct=None):
+        '''
 
-    # when first
+        :param username:
+        :param accuracy: how certain the network was.
+        :param num_attempts:
+        :param num_correct:
+        :return:
+        '''
+
+        # when first
         # creating result row, these values are none until the game ends, and they can be determined
         user = str(username)
         self.c.execute('select UserID from Users where username = ?', (user,))
@@ -212,11 +220,11 @@ class database():
         user = str(username)
         self.c.execute('select UserID from Users where username = ?', (user,))
         userID = self.c.fetchone()[0]
-        self.c.execute('select ResultID from Results where userID = ?', (userID,))
+        self.c.execute('select MAX(ResultID) from Results where userID = ?', (userID,))
 
         resultID = self.c.fetchall()  # want to find most recent result ID for updating. Since resultID auto increment,
         # the most recent will be the largest. Therefore I can find the maximum value in the list c.fetchall()
-        resultID = max(resultID)[0]
+        resultID = resultID[0][0]
 
         self.c.execute(
             "Update Results SET(Overall_accuracy,num_attempts, num_correct) = (?,?,?) where UserID =? and ResultID = ?",
@@ -228,7 +236,7 @@ class database():
 class tkinter_windows:
 
     def __init__(self):
-        self.db = database()
+        self.db = database()  # association- composition
         self.login_success = False
 
     def _start_screen(self):
@@ -396,7 +404,11 @@ class tkinter_windows:
         self.__continue_screen.geometry("500x350")
 
         Label(self.__continue_screen,
-              text="Welcome to the handwriting game - digit edition! \n In this game you will be tested on how neatly you can write numbers.\n The computer will read your writing, \n and will give you an overall score for how legible your writing was!\n Your score will be compared with your friends to see \nwhich of you has the neater writing!").pack()
+              text="Welcome to the handwriting game - digit edition! \n In this game you will be tested on how neatly "
+                   "you can write numbers.\n The computer will read your writing, \n and will give you an overall "
+                   "score for how legible your writing was!\n Your score will be compared with your friends to see "
+                   "\nwhich of you has the neater writing!").pack()
+
         Label(self.__continue_screen, text="").pack()
         Label(self.__continue_screen, text="").pack()
         if self.login_success:
@@ -416,17 +428,17 @@ class tkinter_windows:
 
         leaders = self.db.display_leaderboard()
 
-        row1 = 'Username,accuracy, number of attempts'
+        row1 = 'Username,accuracy, number of attempts, number correct'
         Label(self.__leaderboard_screen, text=row1).pack()
         for row in leaders:
-            Label(self.__leaderboard_screen, text=f'{row[0]} | {row[1]} | {row[2]}').pack()
-        # Label(self.__leaderboard_screen, text='row').pack()
+            Label(self.__leaderboard_screen, text=f'{row[0]} | {row[1]} | {row[2]} | {row[3]} ').pack()
+
         self.search_username = Entry(self.__leaderboard_screen, textvariable=self.username_to_search).pack()
         Button(self.__leaderboard_screen, text='search username', width=15, height=2, command=self.find_username).pack()
 
     def find_username(self):
         user = str(self.username_to_search.get())  # gets entered text
-        scores = self.db.get_user_score(user)  # returns sql statement that grabs all scores by that username
+        scores = self.db.get_user_scores(user)  # returns sql statement that grabs all scores by that username
         row1 = 'Correct, Prompt, Seen, Certainty(%)'
         Label(self.__leaderboard_screen, text=row1).pack()
         for row in scores:
@@ -455,7 +467,8 @@ class tkinter_windows:
 
         num_images = int(self.num_images_selected.get())
 
-        main.predict(self.root, num_images, self.login_success)
+        draw_window.predict(self.root, num_images, self.login_success)
+
         self.accuracy = 0
         self.num_correct = 0
         self.num_attempts = 0
@@ -465,9 +478,11 @@ class tkinter_windows:
         self.__begin_screen.geometry("300x250")
 
         if self.login_success:
-            self.db.insert_results(str(self.username))
+            self.db.insert_results(str(self.username))  # This creates a resultID for the user so that when rounds
+            # are being inserted into db, there is a valid resultID
 
-        self.result_button = Button(self.__begin_screen, text='Get results', width=15, height=2, command= self.get_results)
+        self.result_button = Button(self.__begin_screen, text='Get results', width=15, height=2,
+                                    command=self.get_results)
         self.result_button.pack()
 
         self.__begin_screen.mainloop()
@@ -502,29 +517,32 @@ class tkinter_windows:
             if self.login_success:
                 self.db.insert_round(str(self.username), attempt_num, correct, prompt, guess, certainty)
 
-
         if self.login_success:
 
             self.db.c.execute('select UserID from Users Where username = ?', (self.username,))
-            userID = self.db.c.fetchone()
+            userID = self.db.c.fetchone()[0]
+
             self.db.c.execute('''SELECT MAX(ResultID)
                                         FROM Users, Results
                                         Where Results.UserID = Users.UserID
                                         ''')
             newest_resultID = self.db.c.fetchone()[0]
+
             # gets average accuracy of user rounds
             self.db.c.execute('''SELECT AVG(Rounds.certainty)
                     FROM Rounds, Users, Results
                     Where (Users.UserID = Rounds.UserID) AND (Results.UserID = Rounds.UserID) 
                     AND Users.UserID = ?
                     AND Rounds.ResultID = ?
-                    ''', (userID, newest_resultID))
+                    AND Rounds.Correct = ?
+                    ''', (userID, newest_resultID, 'Yes'))
             # print(self.db.c.fetchone()[0])
+
             self.accuracy = self.db.c.fetchone()[0]
 
+            if self.accuracy is None:
+                self.accuracy = 0
             self.db.update_results(self.username, self.accuracy, self.num_attempts, self.num_correct)
-
-
 
 
 win = tkinter_windows()
