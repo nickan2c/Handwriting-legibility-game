@@ -1,9 +1,8 @@
 # importing inbuilt python libraries
 from tkinter import *
 import sqlite3
-import os
 import hashlib
-import draw_window
+import main
 import random
 
 
@@ -28,7 +27,7 @@ def hash_password(password, salt=None):
     return hashed, salt
 
 
-class database():
+class database:
 
     def __init__(self):
         self.conn = sqlite3.connect('HandwritingUsers')  # establishes connection with database
@@ -38,50 +37,38 @@ class database():
         # before, it would return " u'username' " now with this line it returns " 'username' "
         self.conn.text_factory = str
 
-        # can be uncommented if tables not yet created
-        # self.c.execute('''CREATE TABLE Users(
-        #   UserID integer NOT NULL PRIMARY KEY,
-        #   username text NOT NULL,
-        #   pw_hashed text NOT NULL,
-        #   salt  text    NOT NULL
-        #   )''')
-        #
-        # self.c.execute('''CREATE TABLE Results(
-        #          ResultID integer NOT NULL PRIMARY KEY,
-        #          UserID integer NOT NULL,
-        #          Overall_accuracy integer,
-        #          num_attempts integer,
-        #          num_correct integer
-        #          )''')
-        #
-        # self.c.execute('''CREATE TABLE Rounds(
-        #           RoundID integer NOT NULL,
-        #           UserID integer NOT NULL,
-        #           ResultID integer NOT NULL,
-        #           Correct text,
-        #           Number_to_draw integer,
-        #           Number_drawn integer,
-        #           Certainty integer,
-        #           primary key (RoundID, UserID,ResultID)
-        #           )''')
-        # self.conn.commit()
-        # pw, s = hash_password('1')
-        # self.c.execute(
-        #     "INSERT INTO Users(username,pw_hashed, salt) VALUES(?,?,?)", ('example', pw, s))
-        #
-        # self.c.execute("INSERT INTO Users(username,pw_hashed, salt) VALUES(?,?,?)",
-        #                ('jane', pw, s))
-        #
-        # self.c.execute(
-        #     "INSERT INTO Results(UserID, Overall_accuracy,num_attempts,num_correct) VALUES(?,?,?,?)",
-        #     (2, 12, 22, 6))  # has res id 1
-        # self.conn.commit()
+        self.c.execute('''CREATE TABLE IF NOT EXISTS Users(
+                  UserID integer NOT NULL PRIMARY KEY,
+                  username text NOT NULL,
+                  pw_hashed text NOT NULL,
+                  salt  text    NOT NULL
+                  )''')
+
+        self.c.execute('''CREATE TABLE IF NOT EXISTS Results(
+                         ResultID integer NOT NULL PRIMARY KEY,
+                         UserID integer NOT NULL,
+                         Overall_accuracy integer,
+                         num_attempts integer,
+                         num_correct integer
+                         )''')
+
+        self.c.execute('''CREATE TABLE IF NOT EXISTS  Rounds(
+                          RoundID integer NOT NULL,
+                          UserID integer NOT NULL,
+                          ResultID integer NOT NULL,
+                          Correct text,
+                          Number_to_draw integer,
+                          Number_drawn integer,
+                          Certainty integer,
+                          primary key (RoundID, UserID,ResultID)
+                          )''')
+        self.conn.commit()
 
     def user_in_db(self, username):
         '''
-
+        check if user is in database
         :param username:
-        :return True:  if user is in database
+        :return True:
         '''
         self.c.execute("select * From Users where username = ?", (username,))
         fetched = self.c.fetchone()
@@ -105,6 +92,12 @@ class database():
         print('Your information has been added!')
 
     def user_password_match(self, username, entered_password):
+        '''
+        Check if username and password match
+        :param username:
+        :param entered_password:
+        :return:
+        '''
         self.c.execute(" SELECT username, salt FROM Users WHERE username = ?", (username,))
         fetched = self.c.fetchone()
         if fetched == None:
@@ -144,21 +137,19 @@ class database():
         :return: list of Rounds that user has done, list
         '''
         username = str(user)
-        self.c.execute('select UserID from Users Where username = ?', (username,))
-        their_UserID = self.c.fetchone()[0]
+        try:
+            self.c.execute('select UserID from Users Where username = ?', (username,))
+            their_UserID = self.c.fetchone()[0]
 
-        self.c.execute('''SELECT Rounds.RoundID, Rounds.Correct, Rounds.Number_to_draw, Rounds.Number_drawn, Rounds.certainty
-                        FROM Rounds
-                        WHERE Rounds.UserID = ?
-                        ''', (their_UserID,))
+            self.c.execute('''SELECT Rounds.RoundID, Rounds.Correct, Rounds.Number_to_draw, Rounds.Number_drawn, Rounds.certainty
+                            FROM Rounds
+                            WHERE Rounds.UserID = ?
+                            ''', (their_UserID,))
+        except TypeError:
+            print('nothing entered')
+            return ['nothing entered']
+
         return self.c.fetchall()
-
-    # def update_column(self, col, value, user):
-    #     self.c.execute('select userID from Users where username = ?', (user,))
-    #     userID = self.c.fetchone()[0]
-    #
-    #     self.c.execute('UPDATE Users SET ? = ? WHERE UserID = ?', (col, value, userID))
-    #     self.conn.commit()
 
     def insert_round(self, user, attempt_num, correct, num_to_draw, num_drawn, certainty):
         '''
@@ -322,29 +313,21 @@ class tkinter_windows:
 
             Button(register_success_screen, text="OK", command=register_success_screen.destroy).pack()
 
-        password = self.password.get()
-        username = self.username.get()
+        password = str(self.password.get())
+        username = str(self.username.get())
 
-        if 2 < len(username) < 20:  # username length
-            if username.isalnum():  # alphanumeric
-                if username[0].isalpha():  # first letter must be capital
-                    if len(password) > 8:  # password length
-                        if ' ' not in password and ' ' not in username:  # no whitespace
-                            if not self.db.user_in_db(str(username)):
-                                register_success()  # display 'registered'
-                                self.db.insert(username, password)  # add them to db
-                            else:
-                                register_failed('username in use. Try logging in')
-                        else:
-                            register_failed('Must not have spaces. Use underscores instead(_)')
-                    else:
-                        register_failed('password must be longer than 8 char')
-                else:
-                    register_failed('First character must be a letter')
-            else:
-                register_failed('Username must be alphanumeric')
-        else:
+        if 3 > len(username) or len(username) > 20:  # username length
             register_failed('that username length is invalid')
+        elif ' ' in password or ' ' in username:  # no whitespace
+            register_failed('Must not have spaces. Use underscores instead(_)')
+        elif not username.isalnum():
+            register_failed('Username must be alphanumeric')
+        elif not username[0].isalpha():  # first letter must be capital
+            register_failed('First character must be a letter')
+        elif len(password) < 8:  # password length
+            register_failed('password must be longer than 8 characters')
+        else:
+            register_success()
 
     def __login(self):
         self.login_screen = Toplevel(self.__main_screen)
@@ -439,7 +422,7 @@ class tkinter_windows:
     def find_username(self):
         user = str(self.username_to_search.get())  # gets entered text
         scores = self.db.get_user_scores(user)  # returns sql statement that grabs all scores by that username
-        row1 = 'Correct, Prompt, Seen, Certainty(%)'
+        row1 = 'Round num, Correct, Prompt, Seen, Certainty(%)'
         Label(self.__leaderboard_screen, text=row1).pack()
         for row in scores:
             Label(self.__leaderboard_screen, text=row).pack()
@@ -467,7 +450,7 @@ class tkinter_windows:
 
         num_images = int(self.num_images_selected.get())
 
-        draw_window.predict(self.root, num_images, self.login_success)
+        main.predict(self.root, num_images, self.login_success)
 
         self.accuracy = 0
         self.num_correct = 0
