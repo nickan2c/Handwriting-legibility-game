@@ -9,16 +9,23 @@ training_data, test_data = np.array(training_data), np.array(test_data)
 flattened_training_data = training_data.reshape(len(training_data), 784)  # changes shape from 28,28 to 784
 flattened_test_data = test_data.reshape(len(test_data), 784)
 
+print(flattened_training_data.shape)
+
 
 def softmax(x):
-    exp_values = np.exp(x - np.max(x, axis=1, keepdims=True))  # axis chooses max from each row individually
-    probabilities = exp_values / np.sum(exp_values, axis=1, keepdims=True)  # keepdims keeps it in original dimensions
+    exp_values = np.exp(x - np.max(x))  # subtract to keep numbers low, as exponential rises very quickly, and
+    probabilities = exp_values / np.sum(exp_values)  # will make training slow
     return probabilities
 
 
 def relu(x):
     # applying the ReLu activation function
     return np.maximum(0, x)
+
+
+def sigmoid(x):
+    # applying the sigmoid activation function
+    return 1 / (1 + np.exp(-x))  # e^-x
 
 
 class Network:
@@ -42,6 +49,10 @@ class Network:
             'Weights_1': np.random.randn(hidden_l1, input_layer),
             'Weights_2': np.random.randn(hidden_l2, hidden_l1),
             'Weights_3': np.random.randn(output_layer, hidden_l2),
+            'bias_1': np.random.randn(hidden_l1),
+            'bias_2': np.random.randn(hidden_l2),
+            'bias_3': np.random.randn(output_layer)
+
         }
 
         return params
@@ -54,17 +65,25 @@ class Network:
         #
         self.params['Z3'] = self.feedforward(self.params['Z2'], 3, activation_func='softmax')
 
-        return np.argmax(self.params['Z3'], axis=0)
+        return self.params['Z3'].T
+
     def feedforward(self, a, layer, activation_func='relu'):
         """Return the output of the network when `a` is input."""
         weights = 'Weights_' + str(layer)  # weights_1 would be the first layer, etc
+        bias = 'bias_' + str(layer)
         w = self.params[weights]
+        b = self.params[bias]
+        #print(w.shape)
         if activation_func == 'relu':
-                z = relu(np.dot(w, a))  # does matrix multiplication of weights by inputs, and then adds bias
+            z = np.dot(w, a)+b  # does matrix multiplication of weights by inputs, and then adds bias
+            z = sigmoid(z)
         elif activation_func == 'softmax':
-            z = softmax(np.dot(w, a)) # does matrix multiplication of weights by inputs, and then# adds bias
+            z = (np.dot(w, a)) + b  # does matrix multiplication of weights by inputs, and then# adds bias
+            z = softmax(z)
 
         return z
 
 
-nn = Network([784, 128, 64, 10])
+nn = Network([784, 256, 128, 10])
+
+
