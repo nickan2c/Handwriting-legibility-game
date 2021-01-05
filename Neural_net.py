@@ -1,89 +1,125 @@
 import tensorflow as tf
-import matplotlib.pyplot as plt
 import numpy as np
-
-mnist = tf.keras.datasets.mnist
-(training_data, training_labels), (test_data, test_labels) = mnist.load_data()  # loads in the mnist dataset
-training_data, test_data = training_data / 255, test_data / 255  # normalises mnist colours to between 0 and 1
-training_data, test_data = np.array(training_data), np.array(test_data)
-flattened_training_data = training_data.reshape(len(training_data), 784)  # changes shape from 28,28 to 784
-flattened_test_data = test_data.reshape(len(test_data), 784)
-
-print(flattened_training_data.shape)
 
 
 def softmax(x):
-    exp_values = np.exp(x - np.max(x))  # subtract to keep numbers low, as exponential rises very quickly, and
-    probabilities = exp_values / np.sum(exp_values)  # will make training slow
-    return probabilities
+    exp_values = np.exp(x - np.max(x))  # subtract to keep numerically stable, as exponential rises very quickly, and
+    output = exp_values / np.sum(exp_values, axis=0)  # will make training slow/ give nan numbers
+    return output
 
 
-def relu(x):
-    # applying the ReLu activation function
-    return np.maximum(0, x)
-
-
-def sigmoid(x):
-    # applying the sigmoid activation function
+def sigmoid(x, derivative=False):
+    '''
+    applying the sigmoid activation function
+    :param x:
+    :param derivative: if true return sigmoid derivative. Used in backpropagation phase
+    '''
+    if derivative:
+        return sigmoid(x) * (1 - sigmoid(x))
     return 1 / (1 + np.exp(-x))  # e^-x
 
 
-class Network:
-    def __init__(self, sizes, epochs=10, learning_rate=0.01):
-        self.sizes = sizes
-        self.num_layers = len(sizes)
+def cross_entropy_loss(y, y_hat):
+    '''
+    applies loss function to calculate how different y and y hat are
+    :param y: desired outputs
+    :param y_hat: output of network
+    :return: loss
+    '''
+    L_sum = np.sum(np.multiply(y, np.log(y_hat))) # no subtract?
+    m = y.shape[1]
+    loss = -(1 / m) * L_sum
 
-        self.epochs = epochs
-        self.learning_rate = learning_rate
-
-        self.params = self.initialization()
-
-    def initialization(self):
-        # number of nodes in each layer
-        input_layer = self.sizes[0]
-        hidden_l1 = self.sizes[1]
-        hidden_l2 = self.sizes[2]
-        output_layer = self.sizes[3]
-
-        params = {
-            'Weights_1': np.random.randn(hidden_l1, input_layer),
-            'Weights_2': np.random.randn(hidden_l2, hidden_l1),
-            'Weights_3': np.random.randn(output_layer, hidden_l2),
-            'bias_1': np.random.randn(hidden_l1),
-            'bias_2': np.random.randn(hidden_l2),
-            'bias_3': np.random.randn(output_layer)
-
-        }
-
-        return params
-
-    def forward(self, training_inputs):
-
-        self.params['Z1'] = self.feedforward(training_inputs.T, 1)
-        print(self.params['Z1'].shape)
-        self.params['Z2'] = self.feedforward(self.params['Z1'], 2)
-        #
-        self.params['Z3'] = self.feedforward(self.params['Z2'], 3, activation_func='softmax')
-
-        return self.params['Z3'].T
-
-    def feedforward(self, a, layer, activation_func='relu'):
-        """Return the output of the network when `a` is input."""
-        weights = 'Weights_' + str(layer)  # weights_1 would be the first layer, etc
-        bias = 'bias_' + str(layer)
-        w = self.params[weights]
-        b = self.params[bias]
-        #print(w.shape)
-        if activation_func == 'relu':
-            z = np.dot(w, a)+b  # does matrix multiplication of weights by inputs, and then adds bias
-            z = sigmoid(z)
-        elif activation_func == 'softmax':
-            z = (np.dot(w, a)) + b  # does matrix multiplication of weights by inputs, and then# adds bias
-            z = softmax(z)
-
-        return z
+    return loss
 
 
-nn = Network([784, 256, 128, 10])
+def load_dataset():
+    mnist = tf.keras.datasets.mnist  # loading with tensorflow
+    (training_data, training_labels), (test_data, test_labels) = mnist.load_data()  # loads in the mnist dataset
+    training_data, test_data = training_data / 255, test_data / 255  # normalises mnist colours to between 0 and 1
+    training_data, test_data = np.array(training_data), np.array(test_data)  # numpy array useful for reshaping and
+    # other things
+
+    flattened_training_data = training_data.reshape(len(training_data), 784)  # changes shape from 28,28 to 784,
+    flattened_test_data = test_data.reshape(len(test_data), 784)  # since that is how it will be inputted
+
+    new_test_labels = get_one_hot(test_labels)
+    new_training_labels = get_one_hot(training_labels)
+
+    return flattened_training_data, flattened_test_data, new_test_labels, new_training_labels
 
 
+def get_one_hot(targets, nb_classes=10):
+    '''
+        :param y: integer
+        :return: an array with 10 digits, where y is the index.
+        for example input 4 will give [0,0,0,0,1,0,0,0,0,0]
+        better because can be directly compared with output of network
+        https://stackoverflow.com/questions/38592324/one-hot-encoding-using-numpy
+    '''
+    res = np.eye(nb_classes)[np.array(targets).reshape(-1)]
+    return res.reshape(list(targets.shape) + [nb_classes])
+
+
+class NeuralNetwork:
+    def __init__(self, x_train, y_train):
+        self.y_train = y_train
+        self.learning_rate = 0.1
+        self.num_images = 60000  # num images
+
+        self.W1 = np.random.randn(256, 784)
+        self.b1 = np.zeros((256, 1))
+        self.W2 = np.random.randn(10, 256)
+        self.b2 = np.zeros((10, 1))
+
+    def forward_pass(self, inputs):
+        self.Z1 = np.matmul(self.W1, inputs) + self.b1
+        self.l1_output = sigmoid(self.Z1)
+        self.Z2 = np.matmul(self.W2, self.l1_output) + self.b2
+        self.final_output = softmax(self.Z2)
+
+        return self.final_output
+
+    def backprop(self, targets, inputs):
+        # layer 2
+        d_cost = self.final_output - targets
+        d_W2_d_cost = (1. / self.num_images) * np.matmul(d_cost, self.l1_output.T)
+        d_b2_d_cost = (1. / self.num_images) * np.sum(d_cost, axis=1, keepdims=True)
+
+        d_l1_output = np.matmul(self.W2.T, d_cost)
+        dZ1 = d_l1_output * sigmoid(self.Z1, derivative=True) * (1 - sigmoid(self.Z1, derivative=True))
+
+        d_W1_d_cost = (1. / self.num_images) * np.matmul(dZ1, inputs.T)
+        d_b1_d_cost = (1. / self.num_images) * np.sum(dZ1, axis=1, keepdims=True)
+
+        return d_W2_d_cost, d_b2_d_cost, d_W1_d_cost, d_b1_d_cost
+
+    def update_parameters(self, d_W2_d_cost, d_b2_d_cost, d_W1_d_cost, d_b1_d_cost):
+        '''
+        Stochastic gradient descent used to update parameters
+        '''
+        self.W2 = self.W2 - self.learning_rate * d_W2_d_cost
+        self.b2 = self.b2 - self.learning_rate * d_b2_d_cost
+        self.W1 = self.W1 - self.learning_rate * d_W1_d_cost
+        self.b1 = self.b1 - self.learning_rate * d_b1_d_cost
+
+
+    def train(self,inputs):
+
+        for i in range(1000):
+
+            self.forward_pass(inputs)
+            d_W2_d_cost, d_b2_d_cost, d_W1_d_cost, d_b1_d_cost = self.backprop(y_train, x_train)
+
+            self.update_parameters(d_W2_d_cost, d_b2_d_cost, d_W1_d_cost, d_b1_d_cost)
+
+            if i % 100 == 0:
+                cost = cross_entropy_loss(self.y_train, self.final_output)
+                print(f'Epoch {i},cost:{cost}')
+
+
+x_train, x_test, y_test, y_train = load_dataset()
+x_train, x_test = x_train.T, x_test.T  # maybe not T
+
+nn = NeuralNetwork(x_train, y_train)
+nn.train(x_train)
