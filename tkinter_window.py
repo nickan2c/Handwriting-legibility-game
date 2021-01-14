@@ -327,6 +327,7 @@ class tkinter_windows:
         elif len(password) < 8:  # password length
             register_failed('password must be longer than 8 characters')
         else:
+            self.db.insert(username, password)
             register_success()
 
     def __login(self):
