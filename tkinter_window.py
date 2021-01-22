@@ -3,7 +3,7 @@ import sqlite3
 import os
 import hashlib
 
-import main
+import client
 
 
 def hash_password(password, salt=None):
@@ -452,7 +452,7 @@ class tkinter_windows:
     def begin(self):
         num_images = int(self.num_images_selected.get())
 
-        main.my_predict(self.root, num_images, self.login_success)
+        client.server_predict(self.root, num_images, self.login_success)
 
         self.accuracy = 0
         self.num_correct = 0
