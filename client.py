@@ -1,4 +1,3 @@
-# https://www.python-course.eu/tkinter_events_binds.php
 from tkinter import *
 from PIL import Image, ImageFilter, EpsImagePlugin
 import random
@@ -80,10 +79,6 @@ class drawing:
         self.certainty = 0
         self.mnist = np.array(self.prepare(name))
 
-    def eval(self, correct, certainty):
-        self.correct = correct
-        self.certainty = certainty
-
     def prepare(self, image):
         im = Image.open(image).convert('L')  # opens the image in greyscale format, black and white
         new_image = Image.new('L', (28, 28), 255)  # creates white canvas of 28x28 pixels, for later use
@@ -146,34 +141,36 @@ class queue:  # used to select a prompt, and make sure the prompt isn't the same
         return self.nums.pop()
 
 
-def server_predict(window, num_games=1, logged_in=False):
+
+def server_predict(window, player, num_games=1, logged_in=False):
     predictions = {}
-    f = open('user_score.txt', 'w')  # multiple players?
+    f = open(f'user_score{player}.txt', 'w')  # multiple players?
     f.write('')  # to clear the file, since a new user is now playing, so it will need to be cleared
     f.close()
     n = Network()
-    prompts = queue(10)
-
+    prompts = n.send(('prompts?', 'prompts?'))
     for game_num in range(num_games):
+
         prompt = prompts.refresh()
 
         draw(window, prompt, game_num)
         name = f'drawing{game_num}.png'
         d = drawing(prompt, game_num, name)
 
-        perc_certain, guess = n.send(d)
+        perc_certain, guess = n.send((d, 'p'))
 
         print(f"I'm {perc_certain}% sure that that's a {guess} ")
 
         predictions[str(game_num + 1)] = str(prompt) + ' ' + str(guess) + ' ' + str(perc_certain)
 
-    f = open('user_score.txt', 'a')  # w because rewrite this file for each user. This is just temporary
+    f = open(f'user_score{player}.txt', 'a')  # w because rewrite this file for each user. This is just temporary
     for item in predictions.items():
         line = ' '.join(item) + '\n'  # key + value assigned to that key in dictionary, ie number and
         # percentage certainty
         # print(line)
         f.write(line)
     f.close()
+
 
 
 def my_predict(window, num_games=1, logged_in=False):
