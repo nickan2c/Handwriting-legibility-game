@@ -2,7 +2,7 @@
 from tkinter import *
 import main
 import random
-
+from database import *
 
 class tkinter_windows:
 
