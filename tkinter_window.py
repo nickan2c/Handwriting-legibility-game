@@ -1,11 +1,11 @@
 # importing inbuilt python libraries
 from tkinter import *
-import sqlite3
-import os
-import hashlib
+import random
+import time
+# Importing my files
 import client
 from networkp import *
-import random
+from database import *
 
 
 class queue:  # used to select a prompt, and make sure the prompt isn't the same twice in a row
@@ -26,224 +26,6 @@ class queue:  # used to select a prompt, and make sure the prompt isn't the same
 
     def dequeue(self):
         return self.nums.pop()
-
-
-def hash_password(password, salt=None):
-    '''
-    If user has already got a salt, then that will be passed in as salt parameter. If not, salt is defined as None, and
-    so a new salt is generated for them.
-    hashes password using hashlib
-    :param password:
-    :param salt:
-    :return: hashed password, salt
-    '''
-    if salt is None:
-        salt = os.urandom(16)  # randomly generates a 16 bit binary string if the user is registering, otherwise uses
-        # their salt that was assigned.
-    password = str(password)
-    hashed = hashlib.pbkdf2_hmac('sha256',  # The hash digest algorithm for hmac
-                                 password.encode('utf-8'),  # Convert the password into bytes
-                                 salt, 1000  # number of iterations of hash- more iterations makes it more secure
-                                 )
-
-    return hashed, salt
-
-
-class database:
-
-    def __init__(self):
-        self.conn = sqlite3.connect('HandwritingUsers')  # establishes connection with database
-        self.c = self.conn.cursor()
-
-        # this is used to solve the problem of the c.fetchall() function returning a unicode string rather than utf-8
-        # before, it would return " u'username' " now with this line it returns " 'username' "
-        self.conn.text_factory = str
-
-        self.c.execute('''CREATE TABLE IF NOT EXISTS Users(
-                  UserID integer NOT NULL PRIMARY KEY,
-                  username text NOT NULL,
-                  pw_hashed text NOT NULL,
-                  salt  text    NOT NULL
-                  )''')
-
-        self.c.execute('''CREATE TABLE IF NOT EXISTS Results(
-                         ResultID integer NOT NULL PRIMARY KEY,
-                         UserID integer NOT NULL,
-                         Overall_accuracy integer,
-                         num_attempts integer,
-                         num_correct integer
-                         )''')
-
-        self.c.execute('''CREATE TABLE IF NOT EXISTS  Rounds(
-                          RoundID integer NOT NULL,
-                          UserID integer NOT NULL,
-                          ResultID integer NOT NULL,
-                          Correct text,
-                          Number_to_draw integer,
-                          Number_drawn integer,
-                          Certainty integer,
-                          primary key (RoundID, UserID,ResultID)
-                          )''')
-        self.conn.commit()
-
-    def user_in_db(self, username):
-        '''
-        check if user is in database
-        :param username:
-        :return True:
-        '''
-        self.c.execute("select * From Users where username = ?", (username,))
-        fetched = self.c.fetchone()
-        if fetched is None:
-            return False
-        return True
-
-    def insert(self, username, password):
-        '''
-        inserts the username into the database, and also hashes the password, then stores the salt,password,username.
-        :param username: StringVar
-        :param password: string
-        '''
-        username = str(username)
-        password = str(password)
-        pw_hashed, salt = hash_password(password)  # no salt provided, default provided as none
-        self.c.execute("INSERT INTO Users(username,pw_hashed,salt) VALUES(?,?,?)",
-                       (username, pw_hashed, salt))  # used parameterised sql to prevent sql injection
-        self.conn.commit()
-        print('Your information has been added!')
-
-    def user_password_match(self, username, entered_password):
-        '''
-        Check if username and password match
-        :param username:
-        :param entered_password:
-        :return:
-        '''
-        self.c.execute(" SELECT username, salt FROM Users WHERE username = ?", (username,))
-        fetched = self.c.fetchone()
-        if fetched is None:
-            print('user not registered')
-            return False
-        else:
-            their_salt = fetched[1]  # grabbed salt of the user from the database
-            pw_hashed, salt = hash_password(entered_password, their_salt)  # used their salt to hash the password
-            # they entered. If match, they are given access
-
-            self.c.execute(
-                " SELECT username, pw_hashed, salt FROM Users WHERE username = ? AND pw_hashed = ? ",
-                (username, pw_hashed))
-            user_details = self.c.fetchall()
-
-            if len(user_details) == 0:
-                print('not in database')
-                return False
-            else:
-                print('you"re in')
-                return True
-
-    def display_leaderboard(self):
-        self.c.execute('''SELECT Users.username, Results.Overall_accuracy,Results.num_attempts,Results.num_correct
-        FROM Users,Results 
-        WHERE Users.UserID = Results.UserID 
-        AND Results.num_attempts != 0
-        ORDER BY Results.Overall_accuracy DESC
-        ''')  # don't want to display people who haven't attempted the game yet
-
-        return self.c.fetchmany(5)  # returns top 5
-
-    def get_user_scores(self, user):  # get every round user has done, and display
-        '''
-
-        :param user:
-        :return: list of Rounds that user has done, list
-        '''
-        username = str(user)
-        try:
-            self.c.execute('select UserID from Users Where username = ?', (username,))
-            their_UserID = self.c.fetchone()[0]
-
-            self.c.execute('''
-            SELECT Rounds.RoundID, Rounds.Correct, Rounds.Number_to_draw, Rounds.Number_drawn, Rounds.certainty
-            FROM Rounds
-            WHERE Rounds.UserID = ? ''', (their_UserID,))
-        except TypeError:
-            print('nothing entered')
-            return ['nothing entered']
-
-        return self.c.fetchall()
-
-    def insert_round(self, user, attempt_num, correct, num_to_draw, num_drawn, certainty):
-        '''
-        :param user: StringVar, username. stringvar since it is a tkinter entry. converted to string below
-        :param attempt_num: int
-        :param correct: Bool
-        :param num_to_draw: int
-        :param num_drawn: int
-        :param certainty: int
-        :return: nothing
-        Adds row to round table, using text file
-        '''
-        user = str(user)
-        if correct:
-            correct = 'Yes'
-        else:
-            correct = 'no'
-
-        self.c.execute('select UserID from Users where username = ?', (user,))
-        userID = self.c.fetchone()[0]
-
-        self.c.execute('select ResultID from Results where userID = ?', (userID,))
-
-        resultID = self.c.fetchall()  # want to find most recent result ID for updating. Since resultID auto increment,
-        # the most recent will be the largest. Therefore I can find the maximum value in the list c.fetchall()
-        resultID = max(resultID)[0]
-
-        self.c.execute(
-            'insert into Rounds(RoundID,UserID,ResultID, Correct,Number_to_draw, Number_drawn, Certainty) VALUES(?,?,'
-            '?,?,?,?,?)',
-            (attempt_num, userID, resultID, correct, num_to_draw, num_drawn, certainty))
-        self.conn.commit()
-        # self.c.execute('select * from Rounds ')
-        # print(self.c.fetchall())
-
-    def insert_results(self, username, accuracy=None, num_attempts=None, num_correct=None):
-        '''
-
-        :param username:
-        :param accuracy: how certain the network was.
-        :param num_attempts:
-        :param num_correct:
-        :return:
-        '''
-
-        # when first
-        # creating result row, these values are none until the game ends, and they can be determined
-        user = str(username)
-        self.c.execute('select UserID from Users where username = ?', (user,))
-        userID = self.c.fetchone()[0]
-        self.c.execute(
-            'insert into Results(UserID, Overall_accuracy,num_attempts, num_correct) VALUES(?,?,?,?)',
-            (userID, accuracy, num_attempts, num_correct))
-        self.c.execute('select * from Results')
-        # print(self.c.fetchall())
-        self.conn.commit()
-
-    def update_results(self, username, accuracy, num_attempts, num_correct):  # when first
-        # creating result row, these values are none until the game ends, and they can be determined
-        user = str(username)
-        self.c.execute('select UserID from Users where username = ?', (user,))
-        userID = self.c.fetchone()[0]
-        self.c.execute('select MAX(ResultID) from Results where userID = ?', (userID,))
-
-        resultID = self.c.fetchall()  # want to find most recent result ID for updating. Since resultID auto increment,
-        # the most recent will be the largest. Therefore I can find the maximum value in the list c.fetchall()
-        resultID = resultID[0][0]
-
-        self.c.execute(
-            "Update Results SET(Overall_accuracy,num_attempts, num_correct) = (?,?,?) where UserID =? and ResultID = ?",
-            (accuracy, num_attempts, num_correct, userID, resultID))
-        self.c.execute('select * from Results')
-        self.conn.commit()
 
 
 class tkinter_windows:
@@ -434,19 +216,17 @@ class tkinter_windows:
         self.__pw_friend = Toplevel(self.__continue_screen)  # like a stack
         self.__pw_friend.title("Selections")
         self.__pw_friend.geometry("400x300")
-        n = Network()
+        self.n = Network()
         Label(self.__pw_friend, text="Connected to the server.").pack()
-        n.send((self.username, 'init'))
+        self.n.send((self.username, 'init'))
         while True:
-            users = n.send(('play?', 'game'))  # are they both loaded in?
+            users = self.n.send(('play?', 'game'))  # are they both loaded in?
             if len(users) == 2:  # waits until they have both loaded to break
-                print('broke 1')
                 break
-        print(users)
 
         def startw_friend():
-            n.send((int(self.num_images_selected.get()), 'num_games'))
-            num_games = n.send(('', 'num_games?'))
+            self.n.send((int(self.num_images_selected.get()), 'num_games'))
+            num_games = self.n.send(('', 'num_games?'))
             Label(self.__pw_friend, text=f'There will be {num_games} rounds').pack()
             Button(self.__pw_friend, text='begin', width=15, height=2,
                    command=lambda: self.__beginw_friend(num_games, player=1)).pack()
@@ -471,10 +251,9 @@ class tkinter_windows:
             Label(self.__pw_friend, text=f"You are player 2! Wait until player 1 ({users[0]}) selects").pack()
 
             while True:
-                reply = n.send(('selected?', 'selected?'))  # are they both loaded in?
-                print('rep', reply)
+                reply = self.n.send(('selected?', 'selected?'))  # are they both loaded in?
                 if reply == 'yes':  # if replies yes then continues
-                    num_games = n.send(('', 'num_games?'))
+                    num_games = self.n.send(('', 'num_games?'))
                     Label(self.__pw_friend, text=f'There will be {num_games} rounds').pack()
                     Button(self.__pw_friend, text='begin', width=15, height=2,
                            command=lambda: self.__beginw_friend(num_games, player=2)).pack()
@@ -496,7 +275,7 @@ class tkinter_windows:
             # are being inserted into db, there is a valid resultID
 
         self.result_button = Button(self.__begin_screen, text='Get results', width=15, height=2,
-                                    command=lambda:self.__get_results_friend(player))
+                                    command=lambda: self.__get_results_friend(player))
         self.result_button.pack()
 
         self.__begin_screen.mainloop()
@@ -549,7 +328,7 @@ class tkinter_windows:
     def __begin(self):
         num_images = int(self.num_images_selected.get())
 
-        client.server_predict(self.root, 1,num_images, self.login_success)
+        client.server_predict(self.root, 1, num_images, self.login_success)
 
         self.accuracy = 0
         self.num_correct = 0
@@ -618,7 +397,6 @@ class tkinter_windows:
                     AND Rounds.ResultID = ?
                     AND Rounds.Correct = ?
                     ''', (userID, newest_resultID, 'Yes'))
-            # print(self.db.c.fetchone()[0])
 
             self.accuracy = self.db.c.fetchone()[0]
 
@@ -626,7 +404,7 @@ class tkinter_windows:
                 self.accuracy = 0
             self.db.update_results(self.username, self.accuracy, self.num_attempts, self.num_correct)
 
-    def __get_results_friend(self, player):# split page into 2, top for u and bot for friend
+    def __get_results_friend(self, player):  # split page into 2, top for u and bot for friend
         certainties = []
         correct = False
         self.result_button.destroy()  # destroy button so that user cannot press multiple times
@@ -657,8 +435,13 @@ class tkinter_windows:
 
         Label(text='').pack()
 
+        while True:
+            time.sleep(1)  # to not overload the network, check every second.
+            if self.n.send(('ready?', 'ready?')) == 'yes':
+                break
+
         if player == 1:
-            Label(self.__begin_screen, text=f"Player{player}").pack()
+            Label(self.__begin_screen, text="Player 2").pack()
             f = open('user_score2.txt', 'r')
             for row in f:
                 new_row = row[:-1]  # remove \n by list slicing
@@ -671,7 +454,6 @@ class tkinter_windows:
                 Label(self.__begin_screen,
                       text=f"Image number{attempt_num}\n You should have drawn a {prompt}.\n I think that's a {guess} I'm {certainty}% certain").pack()
                 if guess == prompt and certainty > 60:
-                    correct = True
                     self.num_correct += 1
                     Label(text=" Great drawing!").pack()
 
@@ -680,7 +462,7 @@ class tkinter_windows:
                 self.num_attempts += 1
 
         elif player == 2:
-            Label(self.__begin_screen, text=f"Player{player}").pack()
+            Label(self.__begin_screen, text="Player 1").pack()
             f = open('user_score1.txt', 'r')
             for row in f:
                 new_row = row[:-1]  # remove \n by list slicing
@@ -693,15 +475,12 @@ class tkinter_windows:
                 Label(self.__begin_screen,
                       text=f"Image number{attempt_num}\n You should have drawn a {prompt}.\n I think that's a {guess} I'm {certainty}% certain").pack()
                 if guess == prompt and certainty > 60:
-                    correct = True
                     self.num_correct += 1
                     Label(text=" Great drawing!").pack()
 
                 else:
                     Label(text=" You've not drawn that well enough for me to recognise it.").pack()
                 self.num_attempts += 1
-
-
 
         if self.login_success:
 
@@ -722,7 +501,6 @@ class tkinter_windows:
                             AND Rounds.ResultID = ?
                             AND Rounds.Correct = ?
                             ''', (userID, newest_resultID, 'Yes'))
-            # print(self.db.c.fetchone()[0])
 
             self.accuracy = self.db.c.fetchone()[0]
 
