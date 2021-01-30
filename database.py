@@ -1,18 +1,17 @@
+import os
 import sqlite3
 import hashlib
-import os
-
 
 def hash_password(password, salt=None):
-    """
+    '''
     If user has already got a salt, then that will be passed in as salt parameter. If not, salt is defined as None, and
     so a new salt is generated for them.
     hashes password using hashlib
     :param password:
     :param salt:
     :return: hashed password, salt
-    """
-    if salt is None:
+    '''
+    if salt == None:
         salt = os.urandom(16)  # randomly generates a 16 bit binary string if the user is registering, otherwise uses
         # their salt that was assigned.
     password = str(password)
@@ -62,40 +61,43 @@ class database:
         self.conn.commit()
 
     def user_in_db(self, username):
-        """
+        '''
         check if user is in database
         :param username:
         :return True:
-        """
+        '''
         self.c.execute("select * From Users where username = ?", (username,))
         fetched = self.c.fetchone()
-        if fetched is None:
+        if fetched == None:
             return False
         return True
 
     def insert(self, username, password):
-        """
+        '''
         inserts the username into the database, and also hashes the password, then stores the salt,password,username.
-        :param username: StringVar
-        :param password: string
-        """
+        :param username StringVar:
+        :param password str:
+        :return:
+        '''
         username = str(username)
         password = str(password)
         pw_hashed, salt = hash_password(password)  # no salt provided, default provided as none
         self.c.execute("INSERT INTO Users(username,pw_hashed,salt) VALUES(?,?,?)",
                        (username, pw_hashed, salt))  # used parameterised sql to prevent sql injection
         self.conn.commit()
+        print('Your information has been added!')
 
     def user_password_match(self, username, entered_password):
-        """
+        '''
         Check if username and password match
         :param username:
         :param entered_password:
         :return:
-        """
+        '''
         self.c.execute(" SELECT username, salt FROM Users WHERE username = ?", (username,))
         fetched = self.c.fetchone()
-        if fetched is None:
+        if fetched == None:
+            print('user not registered')
             return False
         else:
             their_salt = fetched[1]  # grabbed salt of the user from the database
@@ -108,8 +110,10 @@ class database:
             user_details = self.c.fetchall()
 
             if len(user_details) == 0:
+                print('not in database')
                 return False
             else:
+                print('you"re in')
                 return True
 
     def display_leaderboard(self):
@@ -123,27 +127,28 @@ class database:
         return self.c.fetchmany(5)  # returns top 5
 
     def get_user_scores(self, user):  # get every round user has done, and display
-        """
+        '''
 
         :param user:
         :return: list of Rounds that user has done, list
-        """
+        '''
         username = str(user)
         try:
             self.c.execute('select UserID from Users Where username = ?', (username,))
             their_UserID = self.c.fetchone()[0]
 
-            self.c.execute('''
-            SELECT Rounds.RoundID, Rounds.Correct, Rounds.Number_to_draw, Rounds.Number_drawn, Rounds.certainty
-            FROM Rounds
-            WHERE Rounds.UserID = ? ''', (their_UserID,))
+            self.c.execute('''SELECT Rounds.RoundID, Rounds.Correct, Rounds.Number_to_draw, Rounds.Number_drawn, Rounds.certainty
+                            FROM Rounds
+                            WHERE Rounds.UserID = ?
+                            ''', (their_UserID,))
         except TypeError:
+            print('nothing entered')
             return ['nothing entered']
 
         return self.c.fetchall()
 
     def insert_round(self, user, attempt_num, correct, num_to_draw, num_drawn, certainty):
-        """
+        '''
         :param user: StringVar, username. stringvar since it is a tkinter entry. converted to string below
         :param attempt_num: int
         :param correct: Bool
@@ -152,7 +157,7 @@ class database:
         :param certainty: int
         :return: nothing
         Adds row to round table, using text file
-        """
+        '''
         user = str(user)
         if correct:
             correct = 'Yes'
@@ -169,21 +174,21 @@ class database:
         resultID = max(resultID)[0]
 
         self.c.execute(
-            'insert into Rounds(RoundID,UserID,ResultID, Correct,Number_to_draw, Number_drawn, Certainty) VALUES(?,?,'
-            '?,?,?,?,?)',
+            'insert into Rounds(RoundID,UserID,ResultID, Correct,Number_to_draw, Number_drawn, Certainty) VALUES(?,?,?,?,?,?,?)',
             (attempt_num, userID, resultID, correct, num_to_draw, num_drawn, certainty))
         self.conn.commit()
         # self.c.execute('select * from Rounds ')
+        # print(self.c.fetchall())
 
     def insert_results(self, username, accuracy=None, num_attempts=None, num_correct=None):
-        """
+        '''
 
         :param username:
         :param accuracy: how certain the network was.
         :param num_attempts:
         :param num_correct:
         :return:
-        """
+        '''
 
         # when first
         # creating result row, these values are none until the game ends, and they can be determined
@@ -194,6 +199,7 @@ class database:
             'insert into Results(UserID, Overall_accuracy,num_attempts, num_correct) VALUES(?,?,?,?)',
             (userID, accuracy, num_attempts, num_correct))
         self.c.execute('select * from Results')
+        # print(self.c.fetchall())
         self.conn.commit()
 
     def update_results(self, username, accuracy, num_attempts, num_correct):  # when first
@@ -212,4 +218,3 @@ class database:
             (accuracy, num_attempts, num_correct, userID, resultID))
         self.c.execute('select * from Results')
         self.conn.commit()
-
