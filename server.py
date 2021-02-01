@@ -1,14 +1,16 @@
+# importing inbuilt libraries
 import socket
 from _thread import *
 import pickle
+import random
 from tkinter import *
-import tensorflow as tf
+# Importing external libraries
 import numpy as np
 from PIL import Image, ImageFilter
-import my_nn
-import random
+# Importing my files
+import nn_3
 
-server = "192.168.1.114"
+server = "192.168.0.24"
 port = 5555
 
 s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -30,9 +32,9 @@ class drawing:  # have to redefine class here so that it can unpickle it using t
         self.correct = False
         self.certainty = 0
         self.mnist = np.array(self.prepare(name))
-        # print(self.mnist)
 
-    def prepare(self, image):
+    @staticmethod
+    def prepare(image):
         im = Image.open(image).convert('L')  # opens the image in greyscale format, black and white
         new_image = Image.new('L', (28, 28), 255)  # creates white canvas of 28x28 pixels, for later use
 
@@ -53,7 +55,7 @@ class drawing:  # have to redefine class here so that it can unpickle it using t
 
 def predict(x):
     # loaded_model = tf.keras.models.load_model('cnn2.h5')
-    nn = my_nn.NeuralNetwork(load=True)
+    nn = nn_3.NeuralNetwork(load=True)
     prediction = nn.predict(x)
     guess = np.argmax(prediction)  # finds largest value from guesses, returns index
     perc_certain = int(round(max(prediction) * 100, 2))  # int to get rid of decimal, round to round it
@@ -69,13 +71,12 @@ class queue:  # used to select a prompt, and make sure the prompt isn't the same
         random.shuffle(self.nums)  # shuffles nums
 
     def refresh(self):
-        self.last = self.dequeue()
-        self.enqueue(self.last)
-        return self.last
+        last = self.dequeue()
+        self.enqueue(last)
+        return last
 
     def enqueue(self, item):
-        self.nums.insert(0, item)  # puts it a front. Didn't use append since pop returns final element of list,
-        # so adding to queue from the front makes it easier
+        self.nums.insert(0, item)
 
     def dequeue(self):
         return self.nums.pop()
@@ -85,55 +86,101 @@ prompts = queue(10)
 users = []
 num_games = 0
 selected_games = False
+finished = []
 
 
 def threaded_client(conn):
+    # global variables that are needed because they will need to be accessed by both clients.
     global num_games
     global selected_games
     global prompts
+    global finished
+
     conn.send(pickle.dumps('Connected to NN'))
     reply = ''
     while True:
-        data = pickle.loads(conn.recv(2048 * 4))  # tuple containing data and instruction.
+        try:
+            data = pickle.loads(conn.recv(2048 * 4))  # tuple containing data and instruction.
 
-        if not data:
-            print("Disconnected")
+            if not data:
+                print("Disconnected")
+                break
+            else:
+                if data[1] == 'p':
+                    reply = predict(data[0].mnist)
+                    finished.append(' ')
+
+                if data[1] == 'init':
+                    users.append(data[0])
+
+                if data[1] == 'game':
+                    reply = users
+                    print(users)
+
+                if data[1] == 'num_games':
+                    num_games = data[0]
+                    selected_games = True
+
+                if data[1] == 'num_games?':
+                    reply = num_games
+
+                if data[1] == 'selected?':
+                    if selected_games:
+                        reply = 'yes'
+
+                if data[1] == 'prompts?':
+                    reply = prompts
+
+                if data[1] == 'ready?':
+                    if len(finished) / num_games == 2:
+                        reply = 'yes'
+
+                if data[1] == 'predictions1':
+                    predictions = data[0]
+
+                    f = open('user_score1.txt', 'a')
+                    for item in predictions.items():
+                        line = ' '.join(item) + '\n'  # key + value assigned to that key in dictionary, ie number and
+                        # percentage certainty
+                        f.write(line)
+                    f.close()
+
+                elif data[1] == 'predictions2':
+                    predictions = data[0]
+
+                    f = open('user_score2.txt', 'a')
+                    for item in predictions.items():
+                        line = ' '.join(item) + '\n'  # key + value assigned to that key in dictionary, ie number and
+                        # percentage certainty
+                        f.write(line)
+                    f.close()
+
+                if data[1] == 'predictions1?':
+                    f = open('user_score1.txt', 'r')
+                    new_rows = []
+                    for row in f:
+                        new_row = row[:-1]  # remove \n by list slicing
+                        new_rows.append(new_row)
+
+                    reply = new_rows  # sends contents of file back as an array
+
+                if data[1] == 'predictions2?':
+                    f = open('user_score2.txt', 'r')
+                    new_rows = []
+                    for row in f:
+                        new_row = row[:-1]  # remove \n by list slicing
+                        new_rows.append(new_row)
+
+                    reply = new_rows
+
+            conn.sendall(pickle.dumps(reply))
+
+        except EOFError as e:
+            print(e)
             break
-        else:
-            if data[1] == 'p':
-                reply = predict(data[0].mnist)
-
-            elif data[1] == 'init':
-                print('Waiting for friend')
-                users.append(data[0])
-
-            if data[1] == 'game':
-                print(users)
-                reply = users
-
-            if data[1] == 'num_games':
-                num_games = data[0]
-                selected_games = True
-
-            if data[1] == 'num_games?':
-                reply = num_games
-
-            if data[1] == 'selected?':
-                if selected_games == True:
-                    reply = 'yes'
-
-            if data[1] == 'prompts?':
-                reply = prompts
-            # print("Received: ", data)
-            # print("Sending : ", reply)
-
-        conn.sendall(pickle.dumps(reply))
-
     print("Lost connection")
     conn.close()
 
-
-currentPlayer = 0
 
 while True:
     conn, addr = s.accept()
