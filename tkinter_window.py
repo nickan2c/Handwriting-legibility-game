@@ -220,8 +220,10 @@ class tkinter_windows:
         Label(self.__pw_friend, text="Connected to the server.").pack()
         self.n.send((self.username, 'init'))
         while True:
+            time.sleep(1)  # to not overload the network, check every second.
             users = self.n.send(('play?', 'game'))  # are they both loaded in?
             if len(users) == 2:  # waits until they have both loaded to break
+                print('broke 1')
                 break
 
         def startw_friend():
@@ -251,12 +253,14 @@ class tkinter_windows:
             Label(self.__pw_friend, text=f"You are player 2! Wait until player 1 ({users[0]}) selects").pack()
 
             while True:
+                time.sleep(1)  # to not overload the network, check every second.
                 reply = self.n.send(('selected?', 'selected?'))  # are they both loaded in?
                 if reply == 'yes':  # if replies yes then continues
                     num_games = self.n.send(('', 'num_games?'))
                     Label(self.__pw_friend, text=f'There will be {num_games} rounds').pack()
                     Button(self.__pw_friend, text='begin', width=15, height=2,
                            command=lambda: self.__beginw_friend(num_games, player=2)).pack()
+                    print('broke 2')
                     break
 
     def __beginw_friend(self, num_games, player):
@@ -349,8 +353,6 @@ class tkinter_windows:
         self.__begin_screen.mainloop()
 
     def __get_results(self):
-
-        certainties = []
         correct = False
         self.result_button.destroy()  # destroy button so that user cannot press multiple times
 
@@ -362,7 +364,6 @@ class tkinter_windows:
             prompt = int(new_row[2])  # next digit, after whitespace
             guess = int(new_row[4])  # next digit, after whitespace
             certainty = int(new_row[6:])  # rest of the string, after whitespace
-            certainties.append(certainty)
 
             Label(self.__begin_screen,
                   text=f"Image number{attempt_num}\n You should have drawn a {prompt}.\n I think that's a {guess} I'm {certainty}% certain").pack()
@@ -376,7 +377,7 @@ class tkinter_windows:
             self.num_attempts += 1
 
             if self.login_success:
-                self.db.insert_round(str(self.username), attempt_num, correct, prompt, guess, certainty)
+                self.db.insert_round(str(self.username), correct, prompt, guess, certainty)
 
         if self.login_success:
 
@@ -405,7 +406,6 @@ class tkinter_windows:
             self.db.update_results(self.username, self.accuracy, self.num_attempts, self.num_correct)
 
     def __get_results_friend(self, player):  # split page into 2, top for u and bot for friend
-        certainties = []
         correct = False
         self.result_button.destroy()  # destroy button so that user cannot press multiple times
 
@@ -417,7 +417,6 @@ class tkinter_windows:
             prompt = int(new_row[2])  # next digit, after whitespace
             guess = int(new_row[4])  # next digit, after whitespace
             certainty = int(new_row[6:])  # rest of the string, after whitespace
-            certainties.append(certainty)
 
             Label(self.__begin_screen,
                   text=f"Image number{attempt_num}\n You should have drawn a {prompt}.\n I think that's a {guess} I'm {certainty}% certain").pack()
@@ -430,8 +429,9 @@ class tkinter_windows:
                 Label(text=" You've not drawn that well enough for me to recognise it.").pack()
             self.num_attempts += 1
 
-            if self.login_success:
-                self.db.insert_round(str(self.username), attempt_num, correct, prompt, guess, certainty)
+            self.n.send(((str(self.username), correct, prompt, guess, certainty), 'insert_round'))
+
+            # self.db.insert_round(str(self.username), correct, prompt, guess, certainty)
 
         Label(text='').pack()
 
@@ -441,36 +441,34 @@ class tkinter_windows:
                 break
 
         if player == 1:
-            Label(self.__begin_screen, text="Player 2").pack()
-            f = open('user_score2.txt', 'r')
-            for row in f:
-                new_row = row[:-1]  # remove \n by list slicing
-                attempt_num = int(new_row[0])  # first digit
-                prompt = int(new_row[2])  # next digit, after whitespace
-                guess = int(new_row[4])  # next digit, after whitespace
-                certainty = int(new_row[6:])  # rest of the string, after whitespace
-                certainties.append(certainty)
+            Label(self.__begin_screen, text="Player 2(your friend)").pack()
+            file = self.n.send((' ', 'predictions2?'))
 
+            for row in file:
+                attempt_num = int(row[0])  # first digit
+                prompt = int(row[2])  # next digit, after whitespace
+                guess = int(row[4])  # next digit, after whitespace
+                certainty = int(row[6:])  # rest of the string, after whitespace
                 Label(self.__begin_screen,
-                      text=f"Image number{attempt_num}\n You should have drawn a {prompt}.\n I think that's a {guess} I'm {certainty}% certain").pack()
+                      text=f"Image number {attempt_num}\n You should have drawn a {prompt}.\n I think that's a {guess} I'm {certainty}% certain").pack()
                 if guess == prompt and certainty > 60:
                     self.num_correct += 1
                     Label(text=" Great drawing!").pack()
 
                 else:
-                    Label(text=" You've not drawn that well enough for me to recognise it.").pack()
+                    Label(text=" Not a good enough drawing for me to recognise.").pack()
                 self.num_attempts += 1
 
         elif player == 2:
-            Label(self.__begin_screen, text="Player 1").pack()
-            f = open('user_score1.txt', 'r')
-            for row in f:
-                new_row = row[:-1]  # remove \n by list slicing
-                attempt_num = int(new_row[0])  # first digit
-                prompt = int(new_row[2])  # next digit, after whitespace
-                guess = int(new_row[4])  # next digit, after whitespace
-                certainty = int(new_row[6:])  # rest of the string, after whitespace
-                certainties.append(certainty)
+            Label(self.__begin_screen, text="Player 1(your friend)").pack()
+            file = self.n.send((' ', 'predictions1?'))
+            for row in file:
+                print(row)
+                attempt_num = int(row[0])  # first digit
+                prompt = int(row[2])  # next digit, after whitespace
+                guess = int(row[4])  # next digit, after whitespace
+                certainty = int(row[6:])  # rest of the string, after whitespace
+                print(attempt_num, prompt, guess, certainty)
 
                 Label(self.__begin_screen,
                       text=f"Image number{attempt_num}\n You should have drawn a {prompt}.\n I think that's a {guess} I'm {certainty}% certain").pack()
@@ -479,7 +477,7 @@ class tkinter_windows:
                     Label(text=" Great drawing!").pack()
 
                 else:
-                    Label(text=" You've not drawn that well enough for me to recognise it.").pack()
+                    Label(text="Not a good enough drawing for me to recognise.").pack()
                 self.num_attempts += 1
 
         if self.login_success:
@@ -506,7 +504,10 @@ class tkinter_windows:
 
             if self.accuracy is None:
                 self.accuracy = 0
-            self.db.update_results(self.username, self.accuracy, self.num_attempts, self.num_correct)
+
+            self.n.send(('update results', 'update_results'))
+
+            #self.db.update_results(self.username, self.accuracy, self.num_attempts, self.num_correct)
 
         Label(text=f'Overall accuracy:{self.accuracy}. You got {self.num_correct} correct!')
 
