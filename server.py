@@ -8,7 +8,7 @@ from tkinter import *
 import numpy as np
 from PIL import Image, ImageFilter
 # Importing my files
-import nn_3
+import my_nn
 
 server = "192.168.0.24"
 port = 5555
