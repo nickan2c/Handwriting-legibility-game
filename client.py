@@ -1,7 +1,10 @@
-from tkinter import *
-from PIL import Image, ImageFilter, EpsImagePlugin
+# importing inbuilt python libraries
 import random
-from my_nn import NeuralNetwork, load_dataset
+from tkinter import *
+# importing external libraries
+from PIL import Image, ImageFilter, EpsImagePlugin
+# importing my files
+from nn_3 import NeuralNetwork
 from networkp import *
 
 
@@ -11,7 +14,7 @@ class draw:
         self.attempt_number = attempt_number
         self.window = window
 
-        Label(self.root, text=('draw: {}'.format(prompt)), font=('American typewriter ', 30)).pack()
+        Label(self.root, text=('Draw: {}'.format(prompt)), font=('American typewriter ', 30)).pack()
 
         self.lastx, self.lasty = None, None  # at this point, user hasn't clicked yet so defined as none
         self.canvas = Canvas(self.root, width=280, height=280)  # based on the 28x28 required mnist size
@@ -79,7 +82,12 @@ class drawing:
         self.certainty = 0
         self.mnist = np.array(self.prepare(name))
 
-    def prepare(self, image):
+    @staticmethod
+    def prepare(image):
+        """    Returns the pixel values of the .png input
+    MNIST's images are black background with white ink for the drawing
+    The images are made to fit in a 20x20 pixel box and they
+    are centered in a 28x28"""
         im = Image.open(image).convert('L')  # opens the image in greyscale format, black and white
         new_image = Image.new('L', (28, 28), 255)  # creates white canvas of 28x28 pixels, for later use
 
@@ -97,30 +105,6 @@ class drawing:
         return normalised_values
 
 
-def prepare_img(image):
-    """
-    Returns the pixel values of the .png input
-    MNIST's images are black background with white ink for the drawing
-    The images are made to fit in a 20x20 pixel box and they
-    are centered in a 28x28
-    """
-    im = Image.open(image).convert('L')  # opens the image in greyscale format, black and white
-    new_image = Image.new('L', (28, 28), 255)  # creates white canvas of 28x28 pixels
-
-    img = im.resize((20, 20), Image.ANTIALIAS).filter(ImageFilter.SHARPEN)  # resizes the image to make it 20x20, as per
-    # the mnist dataset standard. Antialias is used to smooth the image out, and sharpen sharpens it
-    h_pos = 4  # horizontal position. original width - new width /2 (so that it can be centered)
-    #  or in other words (28 - 20) / 2
-    v_pos = 4  # vertical position. Same reasoning as horizontal
-
-    new_image.paste(img, (v_pos, h_pos))  # puts this image on top of the white canvas created earlier
-    pixel_values = list(new_image.getdata())  # get pixel values
-
-    normalised_values = [(255 - val) / 255.0 for val in pixel_values]  # 255 - x inverts the colour,
-    # /255 normalises it to be between 0 and 1
-    return normalised_values
-
-
 class queue:  # used to select a prompt, and make sure the prompt isn't the same twice in a row
     def __init__(self, length):
         self.nums = []
@@ -134,23 +118,20 @@ class queue:  # used to select a prompt, and make sure the prompt isn't the same
         return self.last
 
     def enqueue(self, item):
-        self.nums.insert(0, item)  # puts it a front. Didn't use append since pop returns final element of list,
-        # so adding to queue from the front makes it easier
+        self.nums.insert(0, item)
 
     def dequeue(self):
         return self.nums.pop()
 
 
-
 def server_predict(window, player, num_games=1, logged_in=False):
     predictions = {}
-    f = open(f'user_score{player}.txt', 'w')  # multiple players?
+    f = open(f'user_score{player}.txt', 'w')
     f.write('')  # to clear the file, since a new user is now playing, so it will need to be cleared
     f.close()
     n = Network()
     prompts = n.send(('prompts?', 'prompts?'))
     for game_num in range(num_games):
-
         prompt = prompts.refresh()
 
         draw(window, prompt, game_num)
@@ -159,27 +140,19 @@ def server_predict(window, player, num_games=1, logged_in=False):
 
         perc_certain, guess = n.send((d, 'p'))
 
-        print(f"I'm {perc_certain}% sure that that's a {guess} ")
-
         predictions[str(game_num + 1)] = str(prompt) + ' ' + str(guess) + ' ' + str(perc_certain)
 
-    f = open(f'user_score{player}.txt', 'a')  # w because rewrite this file for each user. This is just temporary
-    for item in predictions.items():
-        line = ' '.join(item) + '\n'  # key + value assigned to that key in dictionary, ie number and
-        # percentage certainty
-        # print(line)
-        f.write(line)
-    f.close()
-
+    n.send((predictions, f'predictions{player}'))
 
 
 def my_predict(window, num_games=1, logged_in=False):
+    """
+    Loads neural network locally,rather than from server
+    """
     predictions = {}
     f = open('user_score.txt', 'w')
     f.write('')  # to clear the file, since a new user is now playing, so it will need to be cleared
     f.close()
-    x_train, x_test, y_test, y_train = load_dataset()
-    x_train, x_test = x_train.T, x_test.T
     prompts = queue(10)
     my_nn = NeuralNetwork(load=True)
 
@@ -188,10 +161,9 @@ def my_predict(window, num_games=1, logged_in=False):
 
         d = drawing(prompt, game_num, window)
 
-        x = np.array(prepare_img(f'drawing{game_num}.png'))
+        x = np.array(d.prepare(f'drawing{game_num}.png'))
 
         prediction = my_nn.predict(x)
-        print(prediction)
 
         guess = np.argmax(prediction)  # gets largest value from guesses, returns index
         perc_certain = int(round(max(prediction) * 100))
@@ -199,13 +171,9 @@ def my_predict(window, num_games=1, logged_in=False):
         predictions[str(game_num + 1)] = str(prompt) + ' ' + str(guess) + ' ' + str(perc_certain)
         # adds to dictionary their attempt number(key),prompt, network guess, networks certainty
 
-        print(f"I'm {round(max(prediction) * 100, 2)}% sure that that's a {np.argmax(prediction)} ")
-        # rounds it to 2 decimal places
-
     f = open('user_score.txt', 'a')  # w because rewrite this file for each user. This is just temporary
     for item in predictions.items():
         line = ' '.join(item) + '\n'  # key + value assigned to that key in dictionary, ie number and
         # percentage certainty
-        # print(line)
         f.write(line)
     f.close()
