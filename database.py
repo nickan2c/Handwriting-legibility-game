@@ -50,14 +50,13 @@ class database:
                          )''')
 
         self.c.execute('''CREATE TABLE IF NOT EXISTS  Rounds(
-                          RoundID integer NOT NULL,
+                          RoundID integer NOT NULL PRIMARY KEY,
                           UserID integer NOT NULL,
                           ResultID integer NOT NULL,
                           Correct text,
                           Number_to_draw integer,
                           Number_drawn integer,
-                          Certainty integer,
-                          primary key (RoundID, UserID,ResultID)
+                          Certainty integer
                           )''')
         self.conn.commit()
 
@@ -142,7 +141,7 @@ class database:
 
         return self.c.fetchall()
 
-    def insert_round(self, user, attempt_num, correct, num_to_draw, num_drawn, certainty):
+    def insert_round(self, user, correct, num_to_draw, num_drawn, certainty):
         """
         :param user: StringVar, username. stringvar since it is a tkinter entry. converted to string below
         :param attempt_num: int
@@ -161,17 +160,15 @@ class database:
 
         self.c.execute('select UserID from Users where username = ?', (user,))
         userID = self.c.fetchone()[0]
-
         self.c.execute('select ResultID from Results where userID = ?', (userID,))
 
         resultID = self.c.fetchall()  # want to find most recent result ID for updating. Since resultID auto increment,
         # the most recent will be the largest. Therefore I can find the maximum value in the list c.fetchall()
         resultID = max(resultID)[0]
-
         self.c.execute(
-            'insert into Rounds(RoundID,UserID,ResultID, Correct,Number_to_draw, Number_drawn, Certainty) VALUES(?,?,'
-            '?,?,?,?,?)',
-            (attempt_num, userID, resultID, correct, num_to_draw, num_drawn, certainty))
+            'insert into Rounds(UserID,ResultID, Correct,Number_to_draw, Number_drawn, Certainty) VALUES(?,?,'
+            '?,?,?,?)',
+            (userID, resultID, correct, num_to_draw, num_drawn, certainty))
         self.conn.commit()
         # self.c.execute('select * from Rounds ')
 
@@ -212,4 +209,3 @@ class database:
             (accuracy, num_attempts, num_correct, userID, resultID))
         self.c.execute('select * from Results')
         self.conn.commit()
-
