@@ -133,7 +133,7 @@ class database:
             their_UserID = self.c.fetchone()[0]
 
             self.c.execute('''
-            SELECT Rounds.RoundID, Rounds.Correct, Rounds.Number_to_draw, Rounds.Number_drawn, Rounds.certainty
+            SELECT Rounds.Correct, Rounds.Number_to_draw, Rounds.Number_drawn, Rounds.certainty
             FROM Rounds
             WHERE Rounds.UserID = ? ''', (their_UserID,))
         except TypeError:
@@ -144,7 +144,6 @@ class database:
     def insert_round(self, user, correct, num_to_draw, num_drawn, certainty):
         """
         :param user: StringVar, username. stringvar since it is a tkinter entry. converted to string below
-        :param attempt_num: int
         :param correct: Bool
         :param num_to_draw: int
         :param num_drawn: int
@@ -157,20 +156,22 @@ class database:
             correct = 'Yes'
         else:
             correct = 'no'
+        try:
+            self.c.execute('select UserID from Users where username = ?', (user,))
+            userID = self.c.fetchone()[0]
+            self.c.execute('select ResultID from Results where userID = ?', (userID,))
 
-        self.c.execute('select UserID from Users where username = ?', (user,))
-        userID = self.c.fetchone()[0]
-        self.c.execute('select ResultID from Results where userID = ?', (userID,))
-
-        resultID = self.c.fetchall()  # want to find most recent result ID for updating. Since resultID auto increment,
-        # the most recent will be the largest. Therefore I can find the maximum value in the list c.fetchall()
-        resultID = max(resultID)[0]
-        self.c.execute(
-            'insert into Rounds(UserID,ResultID, Correct,Number_to_draw, Number_drawn, Certainty) VALUES(?,?,'
-            '?,?,?,?)',
-            (userID, resultID, correct, num_to_draw, num_drawn, certainty))
-        self.conn.commit()
-        # self.c.execute('select * from Rounds ')
+            resultID = self.c.fetchall()  # want to find most recent result ID for updating. Since resultID auto
+            # increments,the most recent will be the largest. Therefore I can find the maximum value in the list
+            # c.fetchall()
+            resultID = max(resultID)[0]
+            self.c.execute(
+                'insert into Rounds(UserID,ResultID, Correct,Number_to_draw, Number_drawn, Certainty) VALUES(?,?,'
+                '?,?,?,?)',
+                (userID, resultID, correct, num_to_draw, num_drawn, certainty))
+            self.conn.commit()
+        except sqlite3.ProgrammingError:
+            pass
 
     def insert_results(self, username, accuracy=None, num_attempts=None, num_correct=None):
         """
@@ -181,31 +182,39 @@ class database:
         :param num_correct:
         :return:
         """
-
         # when first
         # creating result row, these values are none until the game ends, and they can be determined
-        user = str(username)
-        self.c.execute('select UserID from Users where username = ?', (user,))
-        userID = self.c.fetchone()[0]
-        self.c.execute(
-            'insert into Results(UserID, Overall_accuracy,num_attempts, num_correct) VALUES(?,?,?,?)',
-            (userID, accuracy, num_attempts, num_correct))
-        self.c.execute('select * from Results')
-        self.conn.commit()
+        try:
+            user = str(username)
+            self.c.execute('select UserID from Users where username = ?', (user,))
+            userID = self.c.fetchone()[0]
+            self.c.execute(
+                'insert into Results(UserID, Overall_accuracy,num_attempts, num_correct) VALUES(?,?,?,?)',
+                (userID, accuracy, num_attempts, num_correct))
+            self.c.execute('select * from Results')
+            self.conn.commit()
+        except sqlite3.ProgrammingError:
+            pass
 
     def update_results(self, username, accuracy, num_attempts, num_correct):  # when first
         # creating result row, these values are none until the game ends, and they can be determined
-        user = str(username)
-        self.c.execute('select UserID from Users where username = ?', (user,))
-        userID = self.c.fetchone()[0]
-        self.c.execute('select MAX(ResultID) from Results where userID = ?', (userID,))
+        try:
+            user = str(username)
+            self.c.execute('select UserID from Users where username = ?', (user,))
+            userID = self.c.fetchone()[0]
+            self.c.execute('select MAX(ResultID) from Results where userID = ?', (userID,))
 
-        resultID = self.c.fetchall()  # want to find most recent result ID for updating. Since resultID auto increment,
-        # the most recent will be the largest. Therefore I can find the maximum value in the list c.fetchall()
-        resultID = resultID[0][0]
+            resultID = self.c.fetchall()  # want to find most recent result ID for updating. Since resultID auto increment,
+            # the most recent will be the largest. Therefore I can find the maximum value in the list c.fetchall()
+            resultID = resultID[0][0]
 
-        self.c.execute(
-            "Update Results SET(Overall_accuracy,num_attempts, num_correct) = (?,?,?) where UserID =? and ResultID = ?",
-            (accuracy, num_attempts, num_correct, userID, resultID))
-        self.c.execute('select * from Results')
-        self.conn.commit()
+            self.c.execute(
+                "Update Results SET(Overall_accuracy,num_attempts, num_correct) = (?,?,?) where UserID =? and ResultID = ?",
+                (accuracy, num_attempts, num_correct, userID, resultID))
+            self.c.execute('select * from Results')
+            self.conn.commit()
+            self.conn.close()  # if connection not closed, database is locked, which means other clients cannot access it
+        except sqlite3.ProgrammingError:
+            pass
+
+
