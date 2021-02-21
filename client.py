@@ -2,14 +2,21 @@
 import random
 from tkinter import *
 # importing external libraries
+import numpy as np
 from PIL import Image, ImageFilter, EpsImagePlugin
 # importing my files
 from nn_3 import NeuralNetwork
-from networkp import *
+from network import *
 
 
 class draw:
-    def __init__(self, window, prompt, attempt_number):  # prompt is the number that the user should draw
+    def __init__(self, window, prompt, attempt_number):
+        '''
+
+        :param window: window to be destroyed
+        :param prompt: number to draw
+        :param attempt_number: attempt number
+        '''
         self.root = Tk()  # initiate window
         self.attempt_number = attempt_number
         self.window = window
@@ -20,12 +27,9 @@ class draw:
         self.canvas = Canvas(self.root, width=280, height=280)  # based on the 28x28 required mnist size
 
         seconds = 4
-        try:
-            self.root.after(4000, self.submit)  # after 4 seconds submit whatever is on screen
-            Label(self.root, text=('You have {} seconds'.format(seconds))).pack()
-        except:  # after 4 seconds, It submits. However user can press submit to submit before this, which gives an
-            # error that it was already closed.
-            pass
+        self.root.after(4000, self.submit)  # after 4 seconds submit whatever is on screen
+        Label(self.root, text=('You have {} seconds'.format(seconds))).pack()
+
         self.canvas.bind('<Button-1>',
                          self.activate_paint)  # button 1 is mouse left click, binded so that every time mouse left
         # click is called, activate_paint function is also called
@@ -56,13 +60,14 @@ class draw:
             # destroyed, so this only destroys on first round
             self.window.destroy()
 
+
         self.root.destroy()
 
     def activate_paint(self, event):
-        '''
+        """
         event is passed in from canvas.bind by default
         when mouse is moved while left click is held, it paints
-        '''
+        """
         self.canvas.bind('<B1-Motion>', self.paint)
         self.lastx, self.lasty = event.x, event.y
 
@@ -108,7 +113,7 @@ class drawing:
 class queue:  # used to select a prompt, and make sure the prompt isn't the same twice in a row
     def __init__(self, length):
         self.nums = []
-        for i in range(1, length):
+        for i in range(0, length):
             self.nums.append(i)
         random.shuffle(self.nums)  # shuffles nums
 
@@ -124,30 +129,30 @@ class queue:  # used to select a prompt, and make sure the prompt isn't the same
         return self.nums.pop()
 
 
-def server_predict(window, player, num_games=1, logged_in=False):
+def server_predict(window, player, network, num_games=1):
     predictions = {}
+    n = Network()
+    prompts = n.send((player, 'prompts?'))
     f = open(f'user_score{player}.txt', 'w')
     f.write('')  # to clear the file, since a new user is now playing, so it will need to be cleared
     f.close()
-    n = Network()
-    prompts = n.send(('prompts?', 'prompts?'))
+
     for game_num in range(num_games):
         prompt = prompts.refresh()
 
         draw(window, prompt, game_num)
         name = f'drawing{game_num}.png'
         d = drawing(prompt, game_num, name)
-
-        perc_certain, guess = n.send((d, 'p'))
+        perc_certain, guess = n.send((d, network))
 
         predictions[str(game_num + 1)] = str(prompt) + ' ' + str(guess) + ' ' + str(perc_certain)
 
     n.send((predictions, f'predictions{player}'))
 
 
-def my_predict(window, num_games=1, logged_in=False):
+def my_predict(window, num_games=1):
     """
-    Loads neural network locally,rather than from server
+    Loads neural network locally, rather than from server.
     """
     predictions = {}
     f = open('user_score.txt', 'w')
@@ -159,7 +164,9 @@ def my_predict(window, num_games=1, logged_in=False):
     for game_num in range(0, num_games):  # how many times game will be played
         prompt = prompts.refresh()
 
-        d = drawing(prompt, game_num, window)
+        draw(window, prompt, game_num)
+
+        d = drawing(prompt, game_num)
 
         x = np.array(d.prepare(f'drawing{game_num}.png'))
 
@@ -170,6 +177,7 @@ def my_predict(window, num_games=1, logged_in=False):
 
         predictions[str(game_num + 1)] = str(prompt) + ' ' + str(guess) + ' ' + str(perc_certain)
         # adds to dictionary their attempt number(key),prompt, network guess, networks certainty
+        print(f'I am {perc_certain}% sure that is a {guess}. It should be a {prompt}')
 
     f = open('user_score.txt', 'a')  # w because rewrite this file for each user. This is just temporary
     for item in predictions.items():
