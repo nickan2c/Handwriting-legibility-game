@@ -7,10 +7,11 @@ from tkinter import *
 # Importing external libraries
 import numpy as np
 from PIL import Image, ImageFilter
+import tensorflow as tf
 # Importing my files
-import my_nn
+import nn_3
 
-server = "192.168.0.24"
+server = "192.168.1.164"
 port = 5555
 
 s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -38,24 +39,43 @@ class drawing:  # have to redefine class here so that it can unpickle it using t
         im = Image.open(image).convert('L')  # opens the image in greyscale format, black and white
         new_image = Image.new('L', (28, 28), 255)  # creates white canvas of 28x28 pixels, for later use
 
-        img = im.resize((20, 20), Image.ANTIALIAS).filter(
-            ImageFilter.SHARPEN)  # resizes the image to make it 20x20, as per
-        # the mnist dataset standard. Antialias is used to smooth the image out, and sharpen sharpens it
+        img = im.resize((20, 20), Image.ANTIALIAS).filter(ImageFilter.SHARPEN)  # resizes the image to make it 20x20,
+        # as per the mnist dataset standard. smoothens and sharpens image
+
         h_pos = 4  # horizontal position. original width - new width /2 (so that it can be centered)
         #  or in other words (28 - 20) / 2
-        v_pos = 4  # vertical position. Same reasoning as horizontal
+        v_pos = 4
 
         new_image.paste(img, (v_pos, h_pos))  # puts this image on top of the white canvas created earlier
-        pixel_values = list(new_image.getdata())  # get pixel values
+        pixel_values = list(new_image.getdata())
 
         normalised_values = [(255 - val) / 255.0 for val in pixel_values]  # 255 - x inverts the colour,
         # /255 normalises it to be between 0 and 1
         return np.array(normalised_values)
 
 
-def predict(x):
-    # loaded_model = tf.keras.models.load_model('cnn2.h5')
+def all_same(items):
+    return all(x == items[0] for x in items)
+
+
+def predict(x, net):
+    if all_same(x):  # if every pixel in the image is the same color, the user hasn't drawn anything, so don't guess
+        guess = None
+        perc_certain = None
+        return perc_certain, guess
+
+    if net == 'cnn':
+        loaded_model = tf.keras.models.load_model('cnn.h5')
+        reshaped_img = x.reshape(1, 28, 28, 1)  # input for convolutional neural network is shaped like this
+
+        prediction = loaded_model.predict(reshaped_img)
+        guess = np.argmax(prediction)
+        perc_certain = int(round(max(prediction[0]) * 100, 2))
+
+        return perc_certain, guess
+
     nn = nn_3.NeuralNetwork(load=True)
+
     prediction = nn.predict(x)
     guess = np.argmax(prediction)  # finds largest value from guesses, returns index
     perc_certain = int(round(max(prediction) * 100, 2))  # int to get rid of decimal, round to round it
@@ -63,12 +83,21 @@ def predict(x):
     return perc_certain, guess
 
 
+def write_predictions(predictions, user):
+    f = open(f'user_score{user}.txt', 'a')
+    for item in predictions.items():
+        line = ' '.join(
+            item) + '\n'  # key + value assigned to that key in dictionary, ie number and percentage certainty
+        f.write(line)
+    f.close()
+
+
 class queue:  # used to select a prompt, and make sure the prompt isn't the same twice in a row
     def __init__(self, length):
         self.nums = []
-        for i in range(1, length):
+        for i in range(0, length):
             self.nums.append(i)
-        random.shuffle(self.nums)  # shuffles nums
+        random.shuffle(self.nums)
 
     def refresh(self):
         last = self.dequeue()
@@ -87,6 +116,7 @@ users = []
 num_games = 0
 selected_games = False
 finished = []
+network = ''
 
 
 def threaded_client(conn):
@@ -95,6 +125,7 @@ def threaded_client(conn):
     global selected_games
     global prompts
     global finished
+    global network
 
     conn.send(pickle.dumps('Connected to NN'))
     reply = ''
@@ -106,8 +137,12 @@ def threaded_client(conn):
                 print("Disconnected")
                 break
             else:
-                if data[1] == 'p':
-                    reply = predict(data[0].mnist)
+                if data[1] == 'Smarter network (easier)':
+                    reply = predict(data[0].mnist, 'cnn')
+                    finished.append(' ')
+
+                if data[1] == 'Smart network (harder)':
+                    reply = predict(data[0].mnist, 'my_nn')
                     finished.append(' ')
 
                 if data[1] == 'init':
@@ -115,7 +150,6 @@ def threaded_client(conn):
 
                 if data[1] == 'game':
                     reply = users
-                    print(users)
 
                 if data[1] == 'num_games':
                     num_games = data[0]
@@ -130,33 +164,20 @@ def threaded_client(conn):
 
                 if data[1] == 'prompts?':
                     reply = prompts
+                    if data[0] == 1:
+                        prompts.refresh()
 
                 if data[1] == 'ready?':
                     if len(finished) / num_games == 2:
                         reply = 'yes'
 
-                if data[1] == 'predictions1':
+                if data[1] == 'predictions1' or data[1] == 'predictions2':
                     predictions = data[0]
+                    user = data[1][-1]
+                    write_predictions(predictions, user)
 
-                    f = open('user_score1.txt', 'a')
-                    for item in predictions.items():
-                        line = ' '.join(item) + '\n'  # key + value assigned to that key in dictionary, ie number and
-                        # percentage certainty
-                        f.write(line)
-                    f.close()
-
-                elif data[1] == 'predictions2':
-                    predictions = data[0]
-
-                    f = open('user_score2.txt', 'a')
-                    for item in predictions.items():
-                        line = ' '.join(item) + '\n'  # key + value assigned to that key in dictionary, ie number and
-                        # percentage certainty
-                        f.write(line)
-                    f.close()
-
-                if data[1] == 'predictions1?':
-                    f = open('user_score1.txt', 'r')
+                if data[1] == 'predictions?':
+                    f = open(f'user_score{data[0]}.txt', 'r')
                     new_rows = []
                     for row in f:
                         new_row = row[:-1]  # remove \n by list slicing
@@ -164,14 +185,15 @@ def threaded_client(conn):
 
                     reply = new_rows  # sends contents of file back as an array
 
-                if data[1] == 'predictions2?':
-                    f = open('user_score2.txt', 'r')
-                    new_rows = []
-                    for row in f:
-                        new_row = row[:-1]  # remove \n by list slicing
-                        new_rows.append(new_row)
+                if data[1] == 'network':
+                    network = data[0]
 
-                    reply = new_rows
+                if data[1] == 'network?':
+                    reply = network
+
+                if data[1] == 'unsend':
+                    users.remove(data[0])
+
 
             conn.sendall(pickle.dumps(reply))
 
