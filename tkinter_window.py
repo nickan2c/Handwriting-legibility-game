@@ -1,17 +1,18 @@
 # importing inbuilt python libraries
-from tkinter import *
 import random
 import time
+from tkinter import *
+
 # Importing my files
 import client
-from networkp import *
 from database import *
+from network import *
 
 
 class queue:  # used to select a prompt, and make sure the prompt isn't the same twice in a row
     def __init__(self, length):
         self.nums = []
-        for i in range(1, length):
+        for i in range(0, length):
             self.nums.append(i)
         random.shuffle(self.nums)  # shuffles nums
 
@@ -34,26 +35,26 @@ class tkinter_windows:
         self.db = database()  # association- composition
         self.login_success = False
 
-    def _start_screen(self):
+    def start_screen(self):
         self.root = Tk()
         self.root.geometry("300x250")  # set window size
         self.root.title("Handwriting tester")  # set window title
 
-        Label(text="Please Select Your Choice", bg="white", width="20", height="2").pack()  # pack puts it into screen
-        Label(text="").pack()  # leaves a gap for aesthetic purposes
+        Label(self.root, text="Please Select Your Choice", bg="white", width="20", height="2").pack()  # pack puts it into screen
+        Label(self.root, text="").pack()  # leaves a gap for aesthetic purposes
 
-        Button(text="Leaderboard", height="2", width="15",
+        Button(self.root, text="Leaderboard", height="2", width="15",
                command=self.__leaderboard).pack()  # upon clicking, calls login function
-        Label(text="").pack()
+        Label(self.root, text="").pack()
 
-        Button(text="play", height="2", width="15",
+        Button(self.root, text="play", height="2", width="15",
                command=self.__main_screen).pack()  # upon clicking, calls register function
 
         self.root.mainloop()
 
     def __main_screen(self):
         self.__main_screen = Toplevel(self.root)  # create window
-        self.__main_screen.geometry("300x250")  # set window size
+        self.__main_screen.geometry("300x300")  # set window size
         self.__main_screen.title("Account selection")  # set window title
 
         Label(self.__main_screen, text="Please Select Your Choice", bg="white", width="20",
@@ -69,6 +70,12 @@ class tkinter_windows:
         Label(self.__main_screen, text="").pack()
 
         Button(self.__main_screen, text="Continue", height="2", width="15", command=self.__continue).pack()
+        Label(self.__main_screen, text="").pack()
+
+        Button(self.__main_screen, text="Sign out", height="2", width="15", command=self.__logout).pack()
+
+    def __logout(self):
+        self.login_success = False
 
     def __register(self):
         self.register_screen = Toplevel(self.__main_screen)  # like a stack
@@ -95,14 +102,13 @@ class tkinter_windows:
         self.password_entry.pack()
 
         Label(self.register_screen, text="").pack()
-        Button(self.register_screen, text="Register", width=10, height=1, bg="blue",
-               command=self.__register_user).pack()
+        Button(self.register_screen, text="Register", width=10, height=1, command=self.__register_user).pack()
 
     def __register_user(self):
         def register_failed(error_msg):
             register_failed_screen = Toplevel(self.register_screen)
             register_failed_screen.title("Error")
-            register_failed_screen.geometry("150x100")
+            register_failed_screen.geometry("250x100")
 
             Label(register_failed_screen, text=error_msg).pack()
             Button(register_failed_screen, text="OK", command=register_failed_screen.destroy).pack()
@@ -121,13 +127,11 @@ class tkinter_windows:
         username = str(self.username.get())
 
         if 3 > len(username) or len(username) > 20:  # username length
-            register_failed('that username length is invalid')
+            register_failed('that username length is invalid \n It must be >2 and <21')
         elif ' ' in password or ' ' in username:  # no whitespace
-            register_failed('Must not have spaces. Use underscores instead(_)')
+            register_failed('Username must not include spaces')
         elif not username.isalnum():
             register_failed('Username must be alphanumeric')
-        elif not username[0].isalpha():  # first letter must be capital
-            register_failed('First character must be a letter')
         elif len(password) < 8:  # password length
             register_failed('password must be longer than 8 characters')
         elif self.db.user_in_db(username):
@@ -183,7 +187,7 @@ class tkinter_windows:
             if self.db.user_password_match(self.username, self.password):
                 login_success()
             else:
-                login_failed('invalid credentials')
+                login_failed('invalid details')
 
         Label(self.login_screen, text="").pack()
         Button(self.login_screen, text="Confirm Login", width=10, height=1, command=login_verify).pack()
@@ -201,7 +205,7 @@ class tkinter_windows:
         Label(self.__continue_screen, text="").pack()
         Label(self.__continue_screen, text="").pack()
         if self.login_success:
-            Label(self.__continue_screen, text="You are logged in").pack()
+            Label(self.__continue_screen, text=f"You are logged in as {self.username}").pack()
 
             Button(self.__continue_screen, text='Play with a friend!', width=15, height=1,
                    command=self.__play_with_friend).pack()
@@ -219,52 +223,84 @@ class tkinter_windows:
         self.n = Network()
         Label(self.__pw_friend, text="Connected to the server.").pack()
         self.n.send((self.username, 'init'))
+        t = 0
         while True:
             time.sleep(1)  # to not overload the network, check every second.
+            t += 1
             users = self.n.send(('play?', 'game'))  # are they both loaded in?
-            if len(users) == 2:  # waits until they have both loaded to break
-                print('broke 1')
+            if len(users) % 2 == 0:  # waits until they have both loaded to break
                 break
+            elif t == 10:
+                self.__pw_friend.destroy()
+                self.n.send((self.username, 'unsend'))
+                return
 
         def startw_friend():
             self.n.send((int(self.num_images_selected.get()), 'num_games'))
             num_games = self.n.send(('', 'num_games?'))
+
+            self.n.send((self.network_selected.get(), 'network'))
+            network = self.n.send(('', 'network?'))
+
             Label(self.__pw_friend, text=f'There will be {num_games} rounds').pack()
-            Button(self.__pw_friend, text='begin', width=15, height=2,
-                   command=lambda: self.__beginw_friend(num_games, player=1)).pack()
+            begin_button = Button(self.__pw_friend, text='begin', width=15, height=2,
+                                  command=lambda: self.__beginw_friend(num_games, network, begin_button, player=1))
+            begin_button.pack()
 
         if self.username == users[0]:  # whoever loaded in first
             Label(self.__pw_friend, text="You are player 1! You get to choose the number of games.").pack()
             self.num_images_selected = StringVar()
-
-            optionList = []
-            for i in range(1, 20):
-                optionList.append(str(i))
+            self.network_selected = StringVar()
+            optionList = [str(x) for x in range(1, 21)]
 
             self.num_images_selected.set(optionList[0])
 
             Label(self.__pw_friend, text='Select the number of images you would like to go through').pack()
             OptionMenu(self.__pw_friend, self.num_images_selected, *optionList).pack()  # drop down menu
 
+            networkList = ['Smart network (harder)', 'Smarter network (easier)']
+            self.network_selected.set(networkList[0])
+
+            Label(self.__pw_friend, text='Select the difficulty of the recognition').pack()
+            OptionMenu(self.__pw_friend, self.network_selected, *networkList).pack()
+
             Button(self.__pw_friend, text='confirm', width=15, height=2,
                    command=startw_friend).pack()
 
         elif self.username == users[1]:
             Label(self.__pw_friend, text=f"You are player 2! Wait until player 1 ({users[0]}) selects").pack()
-
+            t = 0
             while True:
                 time.sleep(1)  # to not overload the network, check every second.
                 reply = self.n.send(('selected?', 'selected?'))  # are they both loaded in?
-                if reply == 'yes':  # if replies yes then continues
-                    num_games = self.n.send(('', 'num_games?'))
+                if reply == 'yes':
+                    num_games = self.n.send(('', 'num_games?'))  # server replies with number of games
+                    network = self.n.send(('', 'network?'))  # server replies with network choice
                     Label(self.__pw_friend, text=f'There will be {num_games} rounds').pack()
-                    Button(self.__pw_friend, text='begin', width=15, height=2,
-                           command=lambda: self.__beginw_friend(num_games, player=2)).pack()
-                    print('broke 2')
+                    begin_button = Button(self.__pw_friend, text='Begin', width=15, height=2,
+                                          command=lambda: self.__beginw_friend(num_games, network, begin_button,
+                                                                               player=2))
+                    begin_button.pack()
                     break
+                t += 1
+                if t == 10:
+                    self.__pw_friend.destroy()
+                    return
 
-    def __beginw_friend(self, num_games, player):
-        client.server_predict(self.root, player, num_games, self.login_success)
+    def __beginw_friend(self, num_games, network, b, player):
+        b.destroy()
+        self.n.send(('refresh', 'users'))
+        while True:
+            try:
+                client.server_predict(self.root, player, network, num_games)
+                break
+
+            except AttributeError:  # if the server is not running
+                self.__warning_screen = Toplevel(self.__selection_screen)
+                self.__warning_screen.title("Error")
+                self.__warning_screen.geometry("300x100")
+                Label(self.__warning_screen, text='The server is not running. Please run the server to continue').pack()
+                return
 
         self.accuracy = 0
         self.num_correct = 0
@@ -274,9 +310,8 @@ class tkinter_windows:
         self.__begin_screen.title("Results")
         self.__begin_screen.geometry("300x250")
 
-        if self.login_success:
-            self.db.insert_results(str(self.username))  # This creates a resultID for the user so that when rounds
-            # are being inserted into db, there is a valid resultID
+        self.db.insert_results(str(self.username))  # This creates a resultID for the user so that when rounds
+        # are being inserted into db, there is a valid resultID
 
         self.result_button = Button(self.__begin_screen, text='Get results', width=15, height=2,
                                     command=lambda: self.__get_results_friend(player))
@@ -293,46 +328,69 @@ class tkinter_windows:
 
         leaders = self.db.display_leaderboard()
 
-        row1 = 'Username,accuracy, number of attempts, number correct'
+        row1 = 'Username, accuracy, number of attempts, number correct'
         Label(self.__leaderboard_screen, text=row1).pack()
         for row in leaders:
             Label(self.__leaderboard_screen, text=f'{row[0]} | {row[1]} | {row[2]} | {row[3]} ').pack()
 
-        self.search_username = Entry(self.__leaderboard_screen, textvariable=self.username_to_search).pack()
+        Entry(self.__leaderboard_screen, textvariable=self.username_to_search).pack()
         Button(self.__leaderboard_screen, text='search username', width=15, height=2,
                command=self.__find_username).pack()
 
     def __find_username(self):
+
         user = str(self.username_to_search.get())  # gets entered text
         scores = self.db.get_user_scores(user)  # returns sql statement that grabs all scores by that username
-        row1 = 'Round num, Correct, Prompt, Seen, Certainty(%)'
-        Label(self.__leaderboard_screen, text=row1).pack()
-        for row in scores:
-            Label(self.__leaderboard_screen, text=row).pack()
+        row1 = 'Round, Correct, Prompt, Seen, Certainty(%)'
+        score_screen = Toplevel(self.__leaderboard_screen)
+        score_screen.title("User scores")
+        score_screen.geometry("400x200")
+
+        Label(score_screen, text=row1).pack()
+        for i, row in enumerate(scores):
+            if row != 'nothing entered':
+                row = str(row)[:-1]
+                row = row[1:]
+            Label(score_screen, text=f'{i}| {row}').pack()
 
     def __selection(self):
         self.__selection_screen = Toplevel(self.__continue_screen)  # like a stack
         self.__selection_screen.title("Selections")
         self.__selection_screen.geometry("400x300")
         self.num_images_selected = StringVar()
-
-        optionList = []
-        for i in range(1, 20):
-            optionList.append(str(i))
+        self.network_selected = StringVar()
+        optionList = [x for x in range(1, 21)]
 
         self.num_images_selected.set(optionList[0])
 
         Label(self.__selection_screen, text='Select the number of images you would like to go through').pack()
         OptionMenu(self.__selection_screen, self.num_images_selected, *optionList).pack()  # drop down menu
 
-        Label(self.__selection_screen, text='Select the number of images you would like to go through').pack()
+        networkList = ['Smart network (harder)', 'Smarter network (easier)']
+        self.network_selected.set(networkList[0])
 
-        Button(self.__selection_screen, text='begin', width=15, height=2, command=self.__begin).pack()
+        Label(self.__selection_screen, text='Select the difficulty of the recognition').pack()
+        OptionMenu(self.__selection_screen, self.network_selected, *networkList).pack()  # drop down menu
 
-    def __begin(self):
+        begin_button = Button(self.__selection_screen, text='begin', width=15, height=2,
+                              command=lambda: self.__begin(begin_button))
+        begin_button.pack()
+
+    def __begin(self, b):
+        b.destroy()
         num_images = int(self.num_images_selected.get())
+        network = str(self.network_selected.get())
+        while True:
+            try:
+                client.server_predict(self.root, 1, network, num_images)
+                break
 
-        client.server_predict(self.root, 1, num_images, self.login_success)
+            except AttributeError:  # if the server is not running, can use local
+                self.__warning_screen = Toplevel(self.__selection_screen)
+                self.__warning_screen.title("Error")
+                self.__warning_screen.geometry("300x100")
+                Label(self.__warning_screen, text='The server is not running. Please run the server to continue').pack()
+                return
 
         self.accuracy = 0
         self.num_correct = 0
@@ -353,70 +411,97 @@ class tkinter_windows:
         self.__begin_screen.mainloop()
 
     def __get_results(self):
-        correct = False
         self.result_button.destroy()  # destroy button so that user cannot press multiple times
 
         f = open('user_score1.txt', 'r')
 
         for row in f:
+            values = []
             new_row = row[:-1]  # remove \n by list slicing
-            attempt_num = int(new_row[0])  # first digit
-            prompt = int(new_row[2])  # next digit, after whitespace
-            guess = int(new_row[4])  # next digit, after whitespace
-            certainty = int(new_row[6:])  # rest of the string, after whitespace
+            for num in new_row.split():
+                values.append(num)
 
-            Label(self.__begin_screen,
-                  text=f"Image number{attempt_num}\n You should have drawn a {prompt}.\n I think that's a {guess} I'm {certainty}% certain").pack()
+            correct = False
+
+            attempt_num = int(values[0])  # first digit
+            prompt = int(values[1])  # next digit, after whitespace
+            try:
+                guess = int(values[2])  # next digit, after whitespace
+                certainty = int(values[3])  # rest of the string, after whitespace
+            except ValueError:  # if None has been written, ValueError for int('N'). None written when user doesnt draw
+                guess = None
+                certainty = 0
+
+            if guess is None:
+                Label(self.__begin_screen,
+                      text=f"Image number{attempt_num}\n You should have drawn a {prompt}.\n You drew nothing.").pack()
+            else:
+                Label(self.__begin_screen,
+                      text=f"Image number{attempt_num}\n You should have drawn a {prompt}.\n I think that's a {guess} I'm {certainty}% certain").pack()
             if guess == prompt and certainty > 60:
                 correct = True
                 self.num_correct += 1
-                Label(text=" Great drawing!").pack()
+                Label(self.__begin_screen,text=" Great drawing!").pack()
 
             else:
-                Label(text=" You've not drawn that well enough for me to recognise it.").pack()
+                Label(self.__begin_screen,text=f" That is not a neat {prompt}, so I have falsely recognised it.").pack()
             self.num_attempts += 1
 
             if self.login_success:
                 self.db.insert_round(str(self.username), correct, prompt, guess, certainty)
 
-        if self.login_success:
+        try:
 
-            self.db.c.execute('select UserID from Users Where username = ?', (self.username,))
-            userID = self.db.c.fetchone()[0]
+            if self.login_success:
 
-            self.db.c.execute('''SELECT MAX(ResultID)
+                self.db.c.execute('select UserID from Users Where username = ?', (self.username,))
+                userID = self.db.c.fetchone()[0]
+
+                self.db.c.execute('''SELECT MAX(ResultID)
                                         FROM Users, Results
                                         Where Results.UserID = Users.UserID
-                                        ''')
-            newest_resultID = self.db.c.fetchone()[0]
+                                        AND Users.UserID = ?
+                                        ''', (userID,))
+                newest_resultID = self.db.c.fetchone()[0]
 
-            # gets average accuracy of user rounds
-            self.db.c.execute('''SELECT AVG(Rounds.certainty)
-                    FROM Rounds, Users, Results
-                    Where (Users.UserID = Rounds.UserID) AND (Results.UserID = Rounds.UserID) 
-                    AND Users.UserID = ?
-                    AND Rounds.ResultID = ?
-                    AND Rounds.Correct = ?
-                    ''', (userID, newest_resultID, 'Yes'))
+                # gets average accuracy of user rounds
+                self.db.c.execute('''SELECT AVG(Rounds.certainty)
+                        FROM Rounds, Users, Results
+                        Where (Users.UserID = Rounds.UserID) AND (Results.UserID = Rounds.UserID) 
+                        AND Users.UserID = ?
+                        AND Rounds.ResultID = ?
+                        AND Rounds.Correct = ?
+                        ''', (userID, newest_resultID, 'Yes'))
 
-            self.accuracy = self.db.c.fetchone()[0]
+                self.accuracy = self.db.c.fetchone()[0]
+                if self.accuracy is None:
+                    self.accuracy = 0
 
-            if self.accuracy is None:
-                self.accuracy = 0
-            self.db.update_results(self.username, self.accuracy, self.num_attempts, self.num_correct)
+                self.db.update_results(self.username, self.accuracy, self.num_attempts, self.num_correct)
+        except sqlite3.ProgrammingError:  # if database is closed i.e same user tried to play twice in one instance
+            pass
 
     def __get_results_friend(self, player):  # split page into 2, top for u and bot for friend
-        correct = False
         self.result_button.destroy()  # destroy button so that user cannot press multiple times
 
-        f = open(f'user_score{player}.txt', 'r')
-        Label(self.__begin_screen, text=f"Player {player} (you)").pack()
+        f = open('user_score1.txt', 'r')
+
         for row in f:
+            values = []
             new_row = row[:-1]  # remove \n by list slicing
-            attempt_num = int(new_row[0])  # first digit
-            prompt = int(new_row[2])  # next digit, after whitespace
-            guess = int(new_row[4])  # next digit, after whitespace
-            certainty = int(new_row[6:])  # rest of the string, after whitespace
+            for num in new_row.split():
+                values.append(num)
+
+            correct = False
+
+            attempt_num = int(values[0])  # first digit
+            prompt = int(values[1])  # next digit, after whitespace
+            try:
+                guess = int(values[2])  # next digit, after whitespace
+                certainty = int(values[3])  # rest of the string, after whitespace
+            except ValueError:  # if None has been written, ValueError for int('N'). None written when user doesnt draw
+                guess = None
+                certainty = 0
 
             Label(self.__begin_screen,
                   text=f"Image number{attempt_num}\n You should have drawn a {prompt}.\n I think that's a {guess} I'm {certainty}% certain").pack()
@@ -429,88 +514,94 @@ class tkinter_windows:
                 Label(text=" You've not drawn that well enough for me to recognise it.").pack()
             self.num_attempts += 1
 
-            self.n.send(((str(self.username), correct, prompt, guess, certainty), 'insert_round'))
-
-            # self.db.insert_round(str(self.username), correct, prompt, guess, certainty)
+            self.db.insert_round(str(self.username), correct, prompt, guess, certainty)
 
         Label(text='').pack()
 
         while True:
-            time.sleep(1)  # to not overload the network, check every second.
+            time.sleep(.5)  # to not overload the network, check every second.
             if self.n.send(('ready?', 'ready?')) == 'yes':
                 break
 
         if player == 1:
             Label(self.__begin_screen, text="Player 2(your friend)").pack()
-            file = self.n.send((' ', 'predictions2?'))
+            file = self.n.send(('2', 'predictions?'))
 
             for row in file:
-                attempt_num = int(row[0])  # first digit
-                prompt = int(row[2])  # next digit, after whitespace
-                guess = int(row[4])  # next digit, after whitespace
-                certainty = int(row[6:])  # rest of the string, after whitespace
+                values = []
+                for num in row.split():
+                    values.append(num)
+
+                attempt_num = int(values[0])  # first digit
+                prompt = int(values[1])  # next digit, after whitespace
+                try:
+                    guess = int(values[2])  # next digit, after whitespace
+                    certainty = int(values[3])  # rest of the string, after whitespace
+                except ValueError:  # if None has been written, ValueError for int('N'). None written when user doesnt draw
+                    guess = None
+                    certainty = 0
                 Label(self.__begin_screen,
                       text=f"Image number {attempt_num}\n You should have drawn a {prompt}.\n I think that's a {guess} I'm {certainty}% certain").pack()
                 if guess == prompt and certainty > 60:
-                    self.num_correct += 1
                     Label(text=" Great drawing!").pack()
 
                 else:
                     Label(text=" Not a good enough drawing for me to recognise.").pack()
-                self.num_attempts += 1
 
         elif player == 2:
             Label(self.__begin_screen, text="Player 1(your friend)").pack()
-            file = self.n.send((' ', 'predictions1?'))
+            file = self.n.send(('1', 'predictions?'))
             for row in file:
-                print(row)
-                attempt_num = int(row[0])  # first digit
-                prompt = int(row[2])  # next digit, after whitespace
-                guess = int(row[4])  # next digit, after whitespace
-                certainty = int(row[6:])  # rest of the string, after whitespace
-                print(attempt_num, prompt, guess, certainty)
+                values = []
+                for num in row.split():
+                    values.append(num)
+
+                attempt_num = int(values[0])  # first digit
+                prompt = int(values[1])  # next digit, after whitespace
+                try:
+                    guess = int(values[2])  # next digit, after whitespace
+                    certainty = int(values[3])  # rest of the string, after whitespace
+                except ValueError:  # if None has been written, ValueError for int('N'). None written when user doesnt draw
+                    guess = None
+                    certainty = 0
 
                 Label(self.__begin_screen,
                       text=f"Image number{attempt_num}\n You should have drawn a {prompt}.\n I think that's a {guess} I'm {certainty}% certain").pack()
                 if guess == prompt and certainty > 60:
-                    self.num_correct += 1
                     Label(text=" Great drawing!").pack()
 
                 else:
                     Label(text="Not a good enough drawing for me to recognise.").pack()
-                self.num_attempts += 1
 
-        if self.login_success:
+        self.db.c.execute('select UserID from Users Where username = ?', (self.username,))
+        userID = self.db.c.fetchone()[0]
 
-            self.db.c.execute('select UserID from Users Where username = ?', (self.username,))
-            userID = self.db.c.fetchone()[0]
+        self.db.c.execute('''SELECT MAX(ResultID)
+                FROM Users, Results
+                Where Results.UserID = Users.UserID
+                AND Users.UserID = ?
+                ''', (userID,))
+        newest_resultID = self.db.c.fetchone()[0]
 
-            self.db.c.execute('''SELECT MAX(ResultID)
-                                                FROM Users, Results
-                                                Where Results.UserID = Users.UserID
-                                                ''')
-            newest_resultID = self.db.c.fetchone()[0]
+        # gets average certainty of user rounds
+        self.db.c.execute('''SELECT AVG(Rounds.certainty)
+                        FROM Rounds, Users, Results
+                        Where (Users.UserID = Rounds.UserID) AND (Results.UserID = Rounds.UserID) 
+                        AND Users.UserID = ?
+                        AND Rounds.ResultID = ?
+                        AND Rounds.Correct = ?
+                        ''', (userID, newest_resultID, 'Yes'))  # only get correct rounds since
 
-            # gets average accuracy of user rounds
-            self.db.c.execute('''SELECT AVG(Rounds.certainty)
-                            FROM Rounds, Users, Results
-                            Where (Users.UserID = Rounds.UserID) AND (Results.UserID = Rounds.UserID) 
-                            AND Users.UserID = ?
-                            AND Rounds.ResultID = ?
-                            AND Rounds.Correct = ?
-                            ''', (userID, newest_resultID, 'Yes'))
+        self.accuracy = self.db.c.fetchone()[0]
 
-            self.accuracy = self.db.c.fetchone()[0]
+        if self.accuracy is None:
+            self.accuracy = 0
 
-            if self.accuracy is None:
-                self.accuracy = 0
+        # self.n.send(('update results', 'update_results'))
 
-            self.n.send(('update results', 'update_results'))
+        self.db.update_results(self.username, self.accuracy, self.num_attempts, self.num_correct)
 
-            #self.db.update_results(self.username, self.accuracy, self.num_attempts, self.num_correct)
-
-        Label(text=f'Overall accuracy:{self.accuracy}. You got {self.num_correct} correct!')
 
 
 win = tkinter_windows()
-win._start_screen()
+win.start_screen()
