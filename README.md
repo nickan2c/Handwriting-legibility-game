@@ -1,10 +1,16 @@
-# NNea
-My handwriting recogniser and legibility scorer python program.
+
+#Handwriting recogniser and legibility scorer python program.
+
+This is a school project I did in sixth form, as a part of my A level and received 73/75.
 
 Uses my own neural network created only with numpy, which can recognise and score handwriting from a scale of 0 to 100, based on how similar it is to the MNIST database. I have included the tensorflow models which i have based this off of.
 
-
 In the client server branch, players can also play online, with another player where they compete to see who has the neatest handwriting.
+
+In the main branch, players can play alone. 
+
+Users can save their scores in the leaderboard if they register as a user. 
+
 
 Run cnn training model.py first, to create the network. It will require a few minutes to train, then once trained will not be trained again. If you would like to use the ANN, you can change this in draw_window.py where it loads 'cnn2.h5' to 'mnist.h5', however the default is cnn for now
 
